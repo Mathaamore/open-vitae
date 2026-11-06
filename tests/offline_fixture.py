@@ -6,6 +6,6 @@ module.providers=Mock()
 module.providers.status.side_effect=AssertionError('Offline workflow probed a provider')
 module.providers.complete.side_effect=AssertionError('Offline workflow called an AI')
 module.providers.cached=None
-sources.json_request=Mock(side_effect=ValueError('Réseau indisponible. Les données locales restent accessibles.'))
-opportunities.request=Mock(side_effect=ValueError('Réseau indisponible.'))
+sources.json_request=Mock(side_effect=ValueError('No network connection. Your saved work is still available.'))
+opportunities.request=Mock(side_effect=ValueError('No network connection.'))
 app=module.app

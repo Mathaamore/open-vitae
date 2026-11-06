@@ -38,7 +38,7 @@ def main():
     shutil.copytree(app, stage/app.name, symlinks=True)
     (stage/'Applications').unlink(missing_ok=True)
     (stage/'Applications').symlink_to('/Applications')
-    (stage/'Installer.txt').write_text('Glisse Open Vitae dans Applications, puis ouvre Open Vitæ.\nTes données restent dans ton espace local lors des mises à jour.\n')
+    (stage/'Install.txt').write_text('Drag Open Vitae into Applications, then open it.\nYour workspace and documents stay in their existing folder when you update.\n')
     dmg = ROOT/'dist/Open-vitae-Mac.dmg'
     run('hdiutil', 'create', '-ov', '-volname', 'Open Vitæ', '-srcfolder', stage, '-format', 'UDZO', dmg)
     run('codesign', '--timestamp', '--sign', os.environ['MACOS_SIGN_IDENTITY'], dmg)

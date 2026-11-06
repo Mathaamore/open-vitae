@@ -4,6 +4,8 @@ import WebKit
 import Sparkle
 #endif
 
+func L(_ key: String) -> String { NSLocalizedString(key, comment: "Product copy; English is the fallback") }
+
 @MainActor
 final class CandidaturesApp: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigationDelegate, WKUIDelegate, WKDownloadDelegate {
     #if canImport(Sparkle)
@@ -45,7 +47,7 @@ final class CandidaturesApp: NSObject, NSApplicationDelegate, NSWindowDelegate, 
         web.uiDelegate = self
         web.isHidden = true
         window.contentView!.addSubview(web)
-        loading = NSTextField(labelWithString: "Ouverture de ton espace…")
+        loading = NSTextField(labelWithString: L("Opening your workspace…"))
         loading.textColor = .secondaryLabelColor
         loading.translatesAutoresizingMaskIntoConstraints = false
         window.contentView!.addSubview(loading)
@@ -69,7 +71,7 @@ final class CandidaturesApp: NSObject, NSApplicationDelegate, NSWindowDelegate, 
             do {
                 try FileManager.default.createDirectory(at: local, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
                 launch(local)
-            } catch { self.error("L’espace local n’a pas pu être créé.") }
+            } catch { self.error(L("Couldn’t create your workspace. Check available storage and try again.")) }
         }
     }
 
@@ -77,33 +79,33 @@ final class CandidaturesApp: NSObject, NSApplicationDelegate, NSWindowDelegate, 
         let menu = NSMenu()
         let appItem = NSMenuItem(); menu.addItem(appItem)
         let appMenu = NSMenu(); appItem.submenu = appMenu
-        appMenu.addItem(withTitle: "À propos d’Open Vitæ", action: #selector(about), keyEquivalent: "")
+        appMenu.addItem(withTitle: L("About Open Vitæ"), action: #selector(about), keyEquivalent: "")
         #if canImport(Sparkle)
-        let update = appMenu.addItem(withTitle: "Rechercher des mises à jour…", action: #selector(SPUStandardUpdaterController.checkForUpdates(_:)), keyEquivalent: "")
+        let update = appMenu.addItem(withTitle: L("Check for Updates…"), action: #selector(SPUStandardUpdaterController.checkForUpdates(_:)), keyEquivalent: "")
         update.target = updater
         #endif
         appMenu.addItem(.separator())
-        appMenu.addItem(withTitle: "Quitter Open Vitæ", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        appMenu.addItem(withTitle: L("Quit Open Vitæ"), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         let fileItem = NSMenuItem(); menu.addItem(fileItem)
-        let fileMenu = NSMenu(title: "Fichier"); fileItem.submenu = fileMenu
-        fileMenu.addItem(withTitle: "Choisir un espace de travail…", action: #selector(changeWorkspace), keyEquivalent: "o")
-        fileMenu.addItem(withTitle: "Afficher l’espace dans le Finder", action: #selector(showWorkspace), keyEquivalent: "")
+        let fileMenu = NSMenu(title: L("File")); fileItem.submenu = fileMenu
+        fileMenu.addItem(withTitle: L("Open Workspace…"), action: #selector(changeWorkspace), keyEquivalent: "o")
+        fileMenu.addItem(withTitle: L("Show Workspace in Finder"), action: #selector(showWorkspace), keyEquivalent: "")
         let editItem = NSMenuItem(); menu.addItem(editItem)
-        let editMenu = NSMenu(title: "Édition"); editItem.submenu = editMenu
-        for (title, action, key) in [("Annuler", "undo:", "z"), ("Rétablir", "redo:", "Z"), ("Couper", "cut:", "x"), ("Copier", "copy:", "c"), ("Coller", "paste:", "v"), ("Tout sélectionner", "selectAll:", "a")] {
+        let editMenu = NSMenu(title: L("Edit")); editItem.submenu = editMenu
+        for (title, action, key) in [(L("Undo"), "undo:", "z"), (L("Redo"), "redo:", "Z"), (L("Cut"), "cut:", "x"), (L("Copy"), "copy:", "c"), (L("Paste"), "paste:", "v"), (L("Select All"), "selectAll:", "a")] {
             editMenu.addItem(withTitle: title, action: Selector(action), keyEquivalent: key)
         }
         let viewItem = NSMenuItem(); menu.addItem(viewItem)
-        let viewMenu = NSMenu(title: "Présentation"); viewItem.submenu = viewMenu
-        viewMenu.addItem(withTitle: "Recharger", action: #selector(reload), keyEquivalent: "r")
-        viewMenu.addItem(withTitle: "Agrandir", action: #selector(zoomIn), keyEquivalent: "+")
-        viewMenu.addItem(withTitle: "Réduire", action: #selector(zoomOut), keyEquivalent: "-")
-        viewMenu.addItem(withTitle: "Taille réelle", action: #selector(resetZoom), keyEquivalent: "0")
+        let viewMenu = NSMenu(title: L("View")); viewItem.submenu = viewMenu
+        viewMenu.addItem(withTitle: L("Reload"), action: #selector(reload), keyEquivalent: "r")
+        viewMenu.addItem(withTitle: L("Zoom In"), action: #selector(zoomIn), keyEquivalent: "+")
+        viewMenu.addItem(withTitle: L("Zoom Out"), action: #selector(zoomOut), keyEquivalent: "-")
+        viewMenu.addItem(withTitle: L("Actual Size"), action: #selector(resetZoom), keyEquivalent: "0")
         for submenu in [appMenu, fileMenu, viewMenu] { for item in submenu.items { if item.action != #selector(NSApplication.terminate(_:)) && item.target == nil { item.target = self } } }
         NSApp.mainMenu = menu
     }
 
-    @objc func about() { NSApp.orderFrontStandardAboutPanel(options: [.applicationName: "Open Vitæ", .applicationVersion: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "Développement", .credits: NSAttributedString(string: "Ton espace local pour préparer la suite.\nLes candidatures restent envoyées manuellement.")]) }
+    @objc func about() { NSApp.orderFrontStandardAboutPanel(options: [.applicationName: "Open Vitæ", .applicationVersion: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? L("Development build"), .credits: NSAttributedString(string: L("Find work worth pursuing.\nYou review and send every application."))]) }
     @objc func showWorkspace() { if let workspace { NSWorkspace.shared.open(workspace) } }
     @objc func zoomIn() { web.pageZoom = min(1.6, web.pageZoom + 0.1) }
     @objc func zoomOut() { web.pageZoom = max(0.8, web.pageZoom - 0.1) }
@@ -115,9 +117,9 @@ final class CandidaturesApp: NSObject, NSApplicationDelegate, NSWindowDelegate, 
         if web.isHidden || base == nil { action(); return }
         web.evaluateJavaScript("(typeof dirty !== 'undefined' && dirty) || window.profileDirty === true") { value, _ in
             if value as? Bool == true {
-                let alert = NSAlert(); alert.messageText = "Des modifications ne sont pas enregistrées."
-                alert.informativeText = "Reviens au dossier pour les enregistrer, ou quitte en les abandonnant."
-                alert.addButton(withTitle: "Revenir au dossier"); alert.addButton(withTitle: "Abandonner les modifications")
+                let alert = NSAlert(); alert.messageText = L("You have unsaved changes.")
+                alert.informativeText = L("Go back to save your changes, or continue without saving them.")
+                alert.addButton(withTitle: L("Go Back")); alert.addButton(withTitle: L("Discard Changes"))
                 alert.beginSheetModal(for: self.window) { if $0 == .alertSecondButtonReturn { action() } else { cancel() } }
             } else { action() }
         }
@@ -125,12 +127,12 @@ final class CandidaturesApp: NSObject, NSApplicationDelegate, NSWindowDelegate, 
 
     func chooseWorkspace() {
         let panel = NSOpenPanel(); panel.canChooseDirectories = true; panel.canChooseFiles = false
-        panel.message = "Choisis le dossier de ton projet contenant data/agent.sqlite3. Tes données restent dans ce dossier."
-        panel.prompt = "Ouvrir cet espace"
+        panel.message = L("Choose an existing Open Vitæ workspace. Your files will stay in that folder.")
+        panel.prompt = L("Open Workspace")
         panel.directoryURL = self.workspace ?? self.suggestedWorkspace
         panel.beginSheetModal(for: window) { response in
-            guard response == .OK, let url = panel.url else { if self.backend == nil { self.loading.stringValue = "Choisis ton espace depuis le menu Fichier." }; return }
-            guard FileManager.default.fileExists(atPath: url.appendingPathComponent("data/agent.sqlite3").path) else { self.error("Ce dossier ne contient pas d’espace de candidatures existant."); return }
+            guard response == .OK, let url = panel.url else { if self.backend == nil { self.loading.stringValue = L("Choose Open Workspace from the File menu to continue.") }; return }
+            guard FileManager.default.fileExists(atPath: url.appendingPathComponent("data/agent.sqlite3").path) else { self.error(L("This folder does not contain an Open Vitæ workspace. Choose the original folder or a restored backup.")); return }
             UserDefaults.standard.set(url.path, forKey: "Workspace")
             if let bookmark = try? url.bookmarkData(options: [.withSecurityScope], includingResourceValuesForKeys: nil, relativeTo: nil) {
                 UserDefaults.standard.set(bookmark, forKey: "WorkspaceBookmark")
@@ -143,7 +145,7 @@ final class CandidaturesApp: NSObject, NSApplicationDelegate, NSWindowDelegate, 
         stop()
         if root.startAccessingSecurityScopedResource() { scopedWorkspace = root }
         workspace = root; startupData = Data(); startupFailure = false; base = nil; web.isHidden = true
-        loading.stringValue = "Ouverture de ton espace…"; loading.isHidden = false
+        loading.stringValue = L("Opening your workspace…"); loading.isHidden = false
         let process = Process(); backend = process
         let resources = Bundle.main.resourceURL!
         process.executableURL = resources.appendingPathComponent("service/candidatures-service")
@@ -173,8 +175,8 @@ final class CandidaturesApp: NSObject, NSApplicationDelegate, NSWindowDelegate, 
                 }
             }
         }
-        process.terminationHandler = { _ in DispatchQueue.main.async { if self.backend === process && !self.startupFailure { self.loading.isHidden = false; self.loading.stringValue = "Le service local s’est arrêté. Relance Open Vitæ." } } }
-        do { try process.run() } catch { self.error("Impossible de démarrer le service local.") }
+        process.terminationHandler = { _ in DispatchQueue.main.async { if self.backend === process && !self.startupFailure { self.loading.isHidden = false; self.loading.stringValue = L("Open Vitæ stopped responding. Quit and reopen the app to continue.") } } }
+        do { try process.run() } catch { self.error(L("Open Vitæ could not start. Quit and reopen the app. If this continues, check your workspace in Finder.")) }
     }
 
     func waitForService(_ url: URL, attempts: Int) {
@@ -185,13 +187,13 @@ final class CandidaturesApp: NSObject, NSApplicationDelegate, NSWindowDelegate, 
                     self.web.load(URLRequest(url: url))
                 } else if attempts > 0 {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { self.waitForService(url, attempts: attempts - 1) }
-                } else { self.error("Le service local ne répond pas. Relance l’application.") }
+                } else { self.error(L("Your workspace is taking too long to open. Quit and reopen Open Vitæ.")) }
             }
         }.resume()
     }
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) { loading.isHidden = true; web.isHidden = false }
-    func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) { self.error("La page locale n’a pas pu être chargée. Utilise Présentation → Recharger.") }
+    func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) { self.error(L("Your workspace could not be displayed. Choose View → Reload to try again.")) }
     func isLocal(_ url: URL) -> Bool { url.scheme == base?.scheme && url.host == base?.host && url.port == base?.port }
     func webView(_ webView: WKWebView, decidePolicyFor action: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
         guard let url = action.request.url else { decisionHandler(.cancel); return }
@@ -214,7 +216,7 @@ final class CandidaturesApp: NSObject, NSApplicationDelegate, NSWindowDelegate, 
         panel.beginSheetModal(for: window) { completionHandler($0 == .OK ? panel.url : nil) }
     }
     func downloadDidFinish(_ download: WKDownload) { downloads.removeAll { $0 === download } }
-    func download(_ download: WKDownload, didFailWithError error: Error, resumeData: Data?) { downloads.removeAll { $0 === download }; if (error as NSError).code != NSURLErrorCancelled { self.error("Le téléchargement n’a pas abouti. Réessaie.") } }
+    func download(_ download: WKDownload, didFailWithError error: Error, resumeData: Data?) { downloads.removeAll { $0 === download }; if (error as NSError).code != NSURLErrorCancelled { self.error(L("The document could not be saved. Try again and choose a folder you can write to.")) } }
     func error(_ text: String) { let alert = NSAlert(); alert.messageText = text; alert.beginSheetModal(for: window) }
     func stop() {
         let process = backend; backend = nil; base = nil

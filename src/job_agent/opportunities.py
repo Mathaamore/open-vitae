@@ -1,4 +1,6 @@
 """Local opportunity editing and explicit, read-only retrieval of public job metadata."""
+
+from .i18n import tr
 from html.parser import HTMLParser
 import ipaddress
 import json
@@ -13,10 +15,10 @@ from .store import canonical, digest, now
 
 def text(value, name, limit, required=False):
     if not isinstance(value, str) or len(value) > limit or any(ord(c) < 32 and c not in '\n\r\t' for c in value):
-        raise ValueError(f'{name} : texte attendu, {limit} caractères maximum.')
+        raise ValueError(tr('opportunities.name_use_text_up_to_limit_characters', name=name, limit=limit))
     value = value.strip()
     if required and not value:
-        raise ValueError(f'{name} est requis.')
+        raise ValueError(tr('opportunities.name_is_required', name=name))
     return value
 
 
@@ -44,18 +46,18 @@ def canonical_url(value):
         query = [(key,val) for key,val in parse_qsl(parsed.query,keep_blank_values=True) if not key.lower().startswith('utm_') and key.lower() not in {'fbclid','gclid'}]
         return urlunsplit(('https',authority,parsed.path.rstrip('/') or '/',urlencode(sorted(query)),fragment))
     except (ValueError, UnicodeError):
-        raise ValueError('Utilise une URL HTTPS publique sans identifiants ni adresse locale.') from None
+        raise ValueError(tr('opportunities.use_a_public_https_link_without_credentials_or')) from None
 
 
 def fields(value):
     if not isinstance(value,dict) or set(value)-{'company','role','url','description','location','salary'}:
-        raise ValueError('Champs d’offre invalides.')
+        raise ValueError(tr('opportunities.the_job_details_could_not_be_read_check'))
     result={key:text(value.get(key,''),key,limit) for key,limit in {'company':200,'role':300,'description':18000,'location':400,'salary':500}.items()}
     result['url']=canonical_url(value.get('url',''))
     if not any(result.values()):
-        raise ValueError('Ajoute une URL, une description ou les informations du poste.')
-    result['company']=result['company'] or 'Entreprise à préciser'
-    result['role']=result['role'] or 'Poste à compléter'
+        raise ValueError(tr('opportunities.add_a_job_link_description_or_a_few'))
+    result['company']=result['company'] or tr('opportunities.company_not_provided')
+    result['role']=result['role'] or tr('opportunities.role_not_provided')
     return result
 
 
@@ -70,7 +72,7 @@ def find_duplicate(store, url):
     return None
 
 
-def add(workspace, value, source='Ajout manuel'):
+def add(workspace, value, source='manual'):
     value=fields(value)
     duplicate=find_duplicate(workspace.store,value['url'])
     if duplicate:
@@ -78,9 +80,9 @@ def add(workspace, value, source='Ajout manuel'):
     identity='offer-'+digest(value['url'])[:20] if value['url'] else 'job-'+uuid.uuid4().hex
     workspace.store.import_jobs([{'id':identity,'company':value['company'],'role':value['role'],'url':value['url'],'manual':True}])
     workspace.store.audit(identity,{'checked_at':now(),'sources':[value['url']] if value['url'] else ['local:manual'],
-        'source':source,'source_url':value['url'],'description':value['description'],'location':value['location'],
+        'source':tr('origin.manual') if source=='manual' else tr('origin.portable'), 'origin':source,'source_url':value['url'],'description':value['description'],'location':value['location'],
         'salary':value['salary'],'pending_retrieval':bool(value['url'] and not value['description']),
-        'active':None,'requirements_checked':False,'scores':{},'warnings':['Informations non vérifiées. Vérifie le poste et les conditions auprès de l’employeur.']})
+        'active':None,'requirements_checked':False,'scores':{},'warnings':[tr('opportunities.details_have_not_been_verified_check_the_role')]})
     workspace.decide(identity,'later')
     return {'id':identity,'duplicate':False}
 
@@ -90,17 +92,17 @@ def edit(workspace, identity, value):
     normalized=fields({key:val for key,val in value.items() if key!='updated_at'})
     duplicate=find_duplicate(workspace.store,normalized['url'])
     if duplicate and duplicate['id'] != identity:
-        raise ValueError('Cette URL est déjà enregistrée dans une autre offre.')
+        raise ValueError(tr('opportunities.this_link_belongs_to_another_saved_job_open'))
     audit={**job['audit'],'title':normalized['role'],**{key:normalized[key] for key in ('description','location','salary')},
            'source_url':normalized['url'],'pending_retrieval':bool(normalized['url'] and not normalized['description']),
            'active':None,'requirements_checked':False,'location_allowed':None,'france_allowed':None,
            'scores':{},'company_context':None,'external_analysis':None,'requirements':[],'blockers':[],'published_at':None,
-           'warnings':['Informations modifiées manuellement. Vérifie l’annonce et relis le dossier existant.']}
+           'warnings':[tr('opportunities.job_details_changed_check_the_listing_and_review')]}
     with workspace.store.db() as db:
         cursor=db.execute("UPDATE jobs SET company=?,role=?,url=?,audit=?,status='NEEDS_INPUT',approved_hash=NULL,updated_at=? WHERE id=? AND updated_at=? AND status NOT IN ('SUBMITTED','SUBMITTING','SUBMISSION_UNCERTAIN')",
             (normalized['company'],normalized['role'],normalized['url'],canonical(audit),now(),identity,value.get('updated_at')))
         if cursor.rowcount != 1:
-            raise ValueError('L’offre a changé ou son envoi est verrouillé. Recharge sa fiche.')
+            raise ValueError(tr('opportunities.this_job_has_changed_or_its_application_is'))
         workspace.store.event(db,identity,'OPPORTUNITY_EDITED',{})
     return workspace.store.get(identity)
 
@@ -122,7 +124,7 @@ class Metadata(HTMLParser):
 
 def retrieve(url):
     url=canonical_url(url)
-    if not url:raise ValueError('Ajoute une URL avant de récupérer l’annonce.')
+    if not url:raise ValueError(tr('opportunities.add_the_job_link_before_getting_its_details'))
     content,resolved=request(url)
     parser=Metadata();parser.feed(content.decode('utf-8',errors='replace'))
     pending=list(parser.documents)
@@ -137,7 +139,7 @@ def retrieve(url):
             graph=node.get('@graph')
             if isinstance(graph,list):pending.extend(graph)
     if not posting:
-        raise ValueError('Aucune fiche JobPosting lisible. Colle la description ou complète les champs ; ton offre est conservée.')
+        raise ValueError(tr('opportunities.this_page_doesn_t_provide_readable_job_details'))
     from .sources import plain
     org=posting.get('hiringOrganization')
     location=posting.get('jobLocation')
@@ -151,7 +153,7 @@ def retrieve(url):
         if isinstance(amount,dict):
             values=[str(amount[key]) for key in ('minValue','maxValue') if type(amount.get(key)) in (int,float)]
             if not values and type(amount.get('value')) in (int,float):values=[str(amount['value'])]
-            if values:salary=' – '.join(values)+' '+pay['currency']+' / '+str(amount.get('unitText') or 'période non précisée')
+            if values:salary=' – '.join(values)+' '+pay['currency']+' / '+str(amount.get('unitText') or tr('opportunities.period_not_provided'))
     return fields({'url':url,'company':org.get('name','') if isinstance(org,dict) else '',
         'role':posting.get('title',''),'description':plain(posting.get('description',''))[:18000],
         'location':place,'salary':salary[:500]})

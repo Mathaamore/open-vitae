@@ -1,4 +1,6 @@
 """Bounded HTTPS reads, with each redirect validated and DNS pinned at connection time."""
+
+from .i18n import tr
 import http.client
 import ipaddress
 import json
@@ -9,13 +11,13 @@ from urllib.parse import urljoin, urlsplit
 
 def public_url(url):
     if not isinstance(url, str) or len(url) > 4096:
-        raise ValueError('Adresse invalide.')
+        raise ValueError(tr('net.enter_a_valid_url'))
     parsed = urlsplit(url)
     if parsed.scheme != 'https' or not parsed.hostname or parsed.username or parsed.password or parsed.port not in (None, 443):
-        raise ValueError('Une adresse HTTPS publique est nécessaire.')
+        raise ValueError(tr('net.use_a_public_https_link_without_a_username'))
     addresses = list(dict.fromkeys(result[4][0] for result in socket.getaddrinfo(parsed.hostname, 443, type=socket.SOCK_STREAM)))
     if not addresses or any(not ipaddress.ip_address(address).is_global for address in addresses):
-        raise ValueError('Les adresses du réseau privé ne sont pas accessibles.')
+        raise ValueError(tr('net.private_network_addresses_cannot_be_opened_paste_the'))
     return parsed, addresses
 
 
@@ -44,26 +46,26 @@ def request(url, data=None, headers=None, limit=3_000_000):
             response = connection.getresponse()
             if response.status in {301, 302, 303, 307, 308}:
                 if data is not None or headers:
-                    raise ValueError('Redirection du fournisseur refusée.')
+                    raise ValueError(tr('net.the_service_redirected_an_authenticated_request_reconnect_and'))
                 url = urljoin(url, response.getheader('Location', ''))
                 continue
             content = response.read(limit + 1)
             if len(content) > limit:
-                raise ValueError('La réponse est trop volumineuse.')
+                raise ValueError(tr('net.the_page_is_too_large_to_read_paste'))
             if response.status >= 400:
                 if response.status in {401, 403}:
-                    raise ValueError('Accès refusé. Vérifie la connexion ou la clé du fournisseur.')
+                    raise ValueError(tr('net.access_was_denied_check_the_connection_or_api'))
                 if response.status == 429:
-                    raise ValueError('La limite du fournisseur est atteinte. Réessaie plus tard.')
-                raise ValueError(f'Le service distant ne répond pas correctement ({response.status}).')
+                    raise ValueError(tr('net.the_service_s_usage_limit_has_been_reached'))
+                raise ValueError(tr('net.the_service_returned_an_error_value1_try_again', value1=response.status))
             return content, url
         finally:
             connection.close()
-    raise ValueError('La page redirige trop de fois.')
+    raise ValueError(tr('net.la_page_redirige_trop_de_fois'))
 
 
 def json_request(url, data=None, headers=None):
     try:
         return json.loads(request(url, data, headers)[0])
     except (OSError, http.client.HTTPException, UnicodeError, json.JSONDecodeError):
-        raise ValueError('Le service distant est indisponible ou a renvoyé une réponse invalide.') from None
+        raise ValueError(tr('net.the_service_could_not_be_reached_or_returned')) from None

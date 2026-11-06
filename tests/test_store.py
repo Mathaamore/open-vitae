@@ -116,7 +116,7 @@ class StoreTest(unittest.TestCase):
         self.assertEqual(self.store.get('01')['status'],'SUBMITTED')
         receipt=json.loads(self.store.history('01')['events'][0]['details'])
         self.assertEqual(receipt['verified_by'],'user')
-        self.assertIn('sans justificatif',receipt['confirmation'])
+        self.assertIn('No receipt',receipt['confirmation'])
 
     def test_edit_or_pdf_change_invalidates_manual_review(self):
         job=self.store.get('01');self.store.decision('01','REVIEW',job['fingerprint'])

@@ -7,7 +7,7 @@ import sys
 
 if __name__ == '__main__':
     if len(sys.argv) != 2:
-        raise SystemExit('Espace local manquant.')
+        raise SystemExit('Choose a workspace to continue.')
     Path(sys.argv[1]).mkdir(parents=True, exist_ok=True, mode=0o700)
     if os.getpgrp() != os.getpid():
         os.setsid()

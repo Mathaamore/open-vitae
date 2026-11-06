@@ -24,6 +24,19 @@ class ApiTest(unittest.TestCase):
         response=self.client.get('/api/jobs');self.assertEqual(response.status_code,200);self.assertEqual(response.json(),[])
         self.assertEqual(response.headers['cache-control'],'no-store')
 
+    def test_english_presentation_preserves_source_and_saved_data(self):
+        from job_agent.i18n import legacy_messages, tr
+        old,key=next(iter(legacy_messages().items()))
+        source='Mon expérience — une équipe française'
+        value={'description':source,'audit':{'warnings':[old]},'dossier':{'missing':[old],'answers':{'why':source},'motivation':source}}
+        result=module.present_job(value)
+        self.assertEqual(result['audit']['warnings'],[tr(key)])
+        self.assertEqual(result['dossier']['missing'],[tr(key)])
+        self.assertEqual(result['description'],source)
+        self.assertEqual(result['dossier']['answers']['why'],source)
+        self.assertEqual(result['dossier']['motivation'],source)
+        self.assertEqual(value['dossier']['missing'],[old])
+
     def test_company_context_does_not_modify_application(self):
         self.store.import_jobs([{'id':'one','company':'Example','role':'Engineer','url':'https://example.com/job'}])
         self.store.audit('one',{'checked_at':now(),'sources':['https://example.com/job'],'company_context': {'company': {'summary': 'Documented product'}, 'role': {'scope': 'A product team'}}, 'scores': {}})
@@ -45,7 +58,7 @@ class ApiTest(unittest.TestCase):
     def test_go_is_disabled_in_preparation_interface(self):
         response=self.client.post('/api/jobs/anything/decision',json={'choice':'GO'},headers={'x-local-token':module.TOKEN})
         self.assertEqual(response.status_code,409)
-        self.assertIn('préparation',response.json()['error'])
+        self.assertIn('cannot submit',response.json()['error'])
     def test_assistant_status_requires_local_token(self):
         self.assertEqual(self.client.get('/api/assistant').status_code,403)
         with patch.object(module.providers,'status',return_value={'available':True,'connected':False}):

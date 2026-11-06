@@ -14,9 +14,9 @@ class FakeProvider:
     def disconnect(self):self.connected=False;return {'connected':False}
     def complete(self,task,payload,max_output=1600,**kwargs):
         if task=='prepare_application':
-            return {'summary':'I build useful products with Python.','selected_facts':[0], 'company_summary':'Example builds a production tool.','product_summary':'A production tool used by teams.','team_summary':'Équipe non confirmée.', 'answers':{'body':'I build useful products with Python and enjoy working with product teams.'}}
-        if task=='rewrite':return {'text':'A shorter factual version.','notes':'Réponse fictive de test.'}
-        return {'text':'On peut préciser le type d’équipe qui te convient avant la recherche.','preferences':{'expectations':'Une petite équipe produit'}}
+            return {'summary':'I build useful products with Python.','selected_facts':[0], 'company_summary':'Example builds a production tool.','product_summary':'A production tool used by teams.','team_summary':'Team not confirmed.', 'answers':{'body':'I build useful products with Python and enjoy working with product teams.'}}
+        if task=='rewrite':return {'text':'A shorter factual version.','notes':'Fictional test response.'}
+        return {'text':'We can refine the team you’re looking for before searching.','preferences':{'expectations':'Une petite équipe produit'}}
 
 module.providers=FakeProvider()
 for identity,company,role in [('offer-one','Example Tools','Python Product Engineer'),('offer-two','Second Example','Data Engineer')]:

@@ -1,4 +1,6 @@
 """Read public forms, prepare grounded drafts and produce a portable PDF; never submit."""
+
+from .i18n import tr
 from html import escape, unescape
 from html.parser import HTMLParser
 import io
@@ -73,16 +75,16 @@ class Page(HTMLParser):
 
 
 def fallback_fields():
-    return [{'key': 'name', 'label': 'Nom', 'type': 'text', 'required': True},
-            {'key': 'email', 'label': 'E-mail', 'type': 'email', 'required': False},
-            {'key': 'body', 'label': 'Présentation pour cette candidature', 'type': 'textarea', 'required': True},
+    return [{'key': 'name', 'label': tr('packets.full_name'), 'type': 'text', 'required': True},
+            {'key': 'email', 'label': tr('packets.email'), 'type': 'email', 'required': False},
+            {'key': 'body', 'label': tr('packets.application_introduction'), 'type': 'textarea', 'required': True},
             {'key': 'resume', 'label': 'CV', 'type': 'file', 'required': True}]
 
 
 def inspect_offer(url):
     content, resolved = request(url)
     if content.startswith(b'%PDF'):
-        raise ValueError('L’annonce est un PDF ; les questions du formulaire restent à vérifier.')
+        raise ValueError(tr('packets.this_listing_is_a_pdf_check_the_application'))
     parser = Page(); parser.feed(content.decode('utf-8', errors='replace'))
     # Follow an explicitly labelled application link from an aggregator, not arbitrary links.
     apply = next((link for link in parser.links if re.search(r'apply (?:for|now)|postuler', link['text'], re.I) and urljoin(resolved, link['url']).startswith('https://') and urlsplit(urljoin(resolved, link['url'])).hostname != urlsplit(resolved).hostname), None)
@@ -123,7 +125,7 @@ def inspect_offer(url):
                 finally:
                     browser.close()
         except Exception:
-            browser_error = 'Le formulaire dynamique n’a pas pu être lu automatiquement.'
+            browser_error = tr('packets.the_application_form_could_not_be_read_check')
     if not exact:
         fields = fallback_fields()
     return {'url': resolved, 'fields': fields, 'inspected': exact,
@@ -158,12 +160,12 @@ def pdf_bytes(profile, role, summary, selected):
         story.append(Paragraph(f'<link href="{escape(profile["portfolio"])}">{escape(profile["portfolio"])}</link>', base))
     story.extend([Spacer(1, 8), Paragraph(escape(summary or profile['bio']), base)])
     if selected:
-        story.append(Paragraph('Réalisations en lien avec le poste', section))
+        story.append(Paragraph(tr('packets.relevant_achievements'), section))
         story.extend(Paragraph('• ' + escape(text), base) for text in selected)
     if profile.get('strengths'):
-        story.extend([Paragraph('Compétences et points forts', section), Paragraph(escape(profile['strengths']).replace('\n', '<br/>'), base)])
+        story.extend([Paragraph(tr('packets.skills_and_strengths'), section), Paragraph(escape(profile['strengths']).replace('\n', '<br/>'), base)])
     if profile.get('cv_text'):
-        story.append(Paragraph('Parcours', section))
+        story.append(Paragraph(tr('packets.experience'), section))
         story.extend(Paragraph(escape(line), base) for line in profile['cv_text'].splitlines() if line.strip())
     out = io.BytesIO()
     SimpleDocTemplate(out, pagesize=A4, rightMargin=40, leftMargin=40, topMargin=35, bottomMargin=35,
@@ -175,22 +177,22 @@ def prepare(workspace, providers, job_id):
     store = workspace.store
     job = store.get(job_id)
     if job['status'] in LOCKED:
-        raise ValueError('Cette candidature est déjà verrouillée dans le suivi.')
+        raise ValueError(tr('portable.this_application_has_a_recorded_or_uncertain_submission_2'))
     if job['revision']:
-        workspace.preparation(job_id, 'ready', 'Le dossier existant a été conservé avec tes modifications.')
+        workspace.preparation(job_id, 'ready', tr('packets.your_existing_materials_and_edits_have_been_kept'))
         return
     profile = workspace.profile()
     if not profile:
-        raise ValueError('Complète ton profil avant de préparer un dossier.')
+        raise ValueError(tr('packets.complete_your_profile_before_preparing_application_materials'))
     original_profile = digest(profile)
-    workspace.preparation(job_id, 'preparing', 'Lecture de l’annonce et des questions du formulaire…')
+    workspace.preparation(job_id, 'preparing', tr('packets.reading_the_listing_and_application_questions'))
     try:
         info = inspect_offer(job['url'])
         context_url = info['url']
         context_basis = 'public_page'
     except (ValueError, OSError):
         info = {'url':job['url'], 'fields':fallback_fields(), 'inspected':False,
-                'text':job['audit'].get('description','')[:18000], 'warning':'La page employeur n’a pas pu être lue. Le dossier utilise les informations de la source et les questions restent à comparer.'}
+                'text':job['audit'].get('description','')[:18000], 'warning':tr('packets.the_employer_s_page_could_not_be_read')}
         context_url = job['audit'].get('source_url') or job['url']
         context_basis = 'job_feed'
     source_facts = []
@@ -201,18 +203,18 @@ def prepare(workspace, providers, job_id):
         source_facts.append(fact); size += len(fact)
     text_fields = [field for field in info['fields'] if field.get('type') == 'textarea' or re.search(r'why|motivat|cover|pitch|challenge|experience|body', field['key'], re.I)][:10]
     question_keys = {field['key'] for field in text_fields}
-    workspace.preparation(job_id, 'preparing', 'Rédaction à partir de tes faits et adaptation du CV…')
+    workspace.preparation(job_id, 'preparing', tr('packets.preparing_your_cv_and_answers_from_your_experience'))
     def validate(result):
         summary = result.get('summary')
         selected = result.get('selected_facts', [])
         generated = result.get('answers', {})
         if not isinstance(summary, str) or len(summary) > 2000 or not isinstance(selected, list) or len(selected) > 5 or any(not isinstance(i, int) or isinstance(i, bool) or not 0 <= i < min(120, len(source_facts)) for i in selected):
-            raise ValueError('Le résumé ou la sélection de faits est invalide. Aucun dossier n’a été remplacé.')
+            raise ValueError(tr('packets.the_summary_or_selected_facts_could_not_be'))
         if not isinstance(generated, dict) or any(key not in question_keys or not isinstance(text, str) or len(text) > 8000 for key, text in generated.items()):
-            raise ValueError('Les réponses proposées sont invalides. Aucun dossier n’a été remplacé.')
+            raise ValueError(tr('packets.the_suggested_answers_could_not_be_used_your'))
         for key in ('company_summary', 'product_summary', 'team_summary'):
             if not isinstance(result.get(key), str) or len(result[key]) > 3000:
-                raise ValueError('Le contexte de l’entreprise est invalide.')
+                raise ValueError(tr('packets.the_company_brief_could_not_be_read_check'))
     result = providers.complete('prepare_application', {
         'instruction': 'Return JSON: summary (short factual candidate summary), selected_facts (up to 5 integer indices from facts), company_summary (only from offer text; say unknown when missing), product_summary, team_summary (unknown if absent), answers (object question-key to answer string). Never answer consents or demographic questions. Facts selected for the CV remain verbatim. No invented accomplishments or product familiarity.',
         'profile': {key: profile.get(key) for key in ('bio', 'strengths', 'expectations')},
@@ -221,7 +223,7 @@ def prepare(workspace, providers, job_id):
     validate(result)
     summary, selected, generated = result['summary'], result['selected_facts'], result['answers']
     if digest(workspace.profile()) != original_profile or store.get(job_id)['revision'] != job['revision']:
-        raise ValueError('Le profil ou le dossier a changé pendant la préparation. Relance-la.')
+        raise ValueError(tr('packets.your_profile_or_application_changed_during_preparation_start'))
     folder = store.root/'data/dossiers'/job_id; folder.mkdir(parents=True, exist_ok=True)
     path = f'data/dossiers/{job_id}/resume.pdf'
     pdf = pdf_bytes(profile, job['role'], summary, [source_facts[i] for i in selected])
@@ -244,12 +246,12 @@ def prepare(workspace, providers, job_id):
             answers[key] = profile.get('portfolio', '')
         else:
             answers[key] = ''
-    missing = [] if info['inspected'] else ['Questions exactes du formulaire à vérifier sur le site de l’entreprise.']
+    missing = [] if info['inspected'] else [tr('portable.check_the_exact_questions_on_the_employer_s')]
     audit = {**job['audit'], 'checked_at': now(), 'sources': list(dict.fromkeys(job['audit'].get('sources', []) + [info['url']])),
              'description': info['text'], 'application_url': info['url'],
              'company_context': {'company': {'summary': result['company_summary'], 'product': result['product_summary'],
                  'sources': [context_url], 'basis': context_basis, 'checked_on': now()[:10]}, 'role': {'team': None, 'scope': result['team_summary'], 'sources': [context_url]}},
-             'warnings': list(dict.fromkeys(job['audit'].get('warnings', []) + ([info['warning']] if info.get('warning') else []) + ['Texte et CV proposés par IA : relire les faits avant utilisation.']))}
+             'warnings': list(dict.fromkeys(job['audit'].get('warnings', []) + ([info['warning']] if info.get('warning') else []) + [tr('packets.ai_assisted_draft_review_the_facts_before_using')]))}
     # Source/form retrieval is not proof of geographic eligibility or of an open position.
     store.audit(job_id, audit)
     (folder/'resume.pdf').write_bytes(pdf)
@@ -258,6 +260,6 @@ def prepare(workspace, providers, job_id):
     (folder/'motivation.txt').write_text(next(iter(generated.values()), ''))
     store.save(job_id, {'answers': answers, 'motivation': '', 'missing': missing,
         'form': {key: value for key, value in info.items() if key in {'url', 'fields', 'inspected'}},
-        'attachments': [{'label': 'CV adapté à relire', 'path': path}],
-        'submission': {'mode': 'manual', 'reason': 'À terminer soi-même sur le site de l’entreprise.'}}, job['revision'])
-    workspace.preparation(job_id, 'ready', 'CV, contexte et réponses préparés. Les éléments à vérifier sont indiqués dans le dossier.')
+        'attachments': [{'label': tr('portable.cv_draft'), 'path': path}],
+        'submission': {'mode': 'manual', 'reason': tr('packets.complete_and_send_this_application_on_the_employer')}}, job['revision'])
+    workspace.preparation(job_id, 'ready', tr('packets.your_materials_are_ready_to_review_check_any'))

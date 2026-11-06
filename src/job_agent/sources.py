@@ -1,4 +1,6 @@
 """Public job feeds, local ranking and explicit feedback. Discovery uses no model tokens."""
+
+from .i18n import tr
 from datetime import datetime, timezone
 from urllib.parse import urlencode
 from html import unescape
@@ -13,7 +15,7 @@ from .opportunities import canonical_url
 from .store import digest, now
 
 SOURCES = [('Arbeitnow · Europe', 'https://www.arbeitnow.com/api/job-board-api'),
-           ('Arbeitnow · Royaume-Uni', 'https://www.arbeitnow.co.uk/api/job-board-api')]
+           ('Arbeitnow · UK', 'https://www.arbeitnow.co.uk/api/job-board-api')]
 
 
 def plain(value):
@@ -39,21 +41,21 @@ def rank(job, profile, feedback, jobs):
         points -= 15
     reasons = []
     if title_hits:
-        reasons.append('Poste : ' + ', '.join(sorted(title_hits)[:3]))
+        reasons.append(tr('sources.role_match') + ', '.join(sorted(title_hits)[:3]))
     if skill_hits:
-        reasons.append('Compétences : ' + ', '.join(sorted(skill_hits)[:3]))
+        reasons.append(tr('sources.relevant_skills') + ', '.join(sorted(skill_hits)[:3]))
     remote = audit.get('remote')
     if profile.get('remote') == 'remote':
         points += 5 if remote is True else -10 if remote is False else 0
         if remote is True:
-            reasons.append('Télétravail annoncé')
+            reasons.append(tr('sources.listed_as_remote'))
     if profile.get('remote') == 'office' and remote is True:
         points -= 10
     if profile.get('salary_min') and isinstance(audit.get('salary_annual_max_eur'), (int, float)) and audit['salary_annual_max_eur'] < profile['salary_min']:
         points -= 20
     places = profile.get('locations', [])
     if any(place.casefold() in location.casefold() for place in places):
-        points += 5; reasons.append('Lieu dans ta recherche')
+        points += 5; reasons.append(tr('sources.matches_a_preferred_location'))
     # Feedback affects matching features, not unrelated facts or a hidden personality profile.
     history = {entry['id']: entry for entry in jobs}
     adjustment = 0
@@ -70,15 +72,15 @@ def rank(job, profile, feedback, jobs):
             adjustment -= 5
     points += max(-8, min(8, adjustment))
     if not reasons:
-        reasons.append('Piste à explorer · correspondance encore limitée')
-    checks = ['Périmètre géographique du télétravail à confirmer' if remote else 'Organisation du travail à confirmer']
+        reasons.append(tr('sources.possible_match_there_is_limited_supporting_detail'))
+    checks = [tr('sources.check_which_countries_are_eligible_for_remote_work') if remote else tr('sources.work_arrangement_needs_checking')]
     if not audit.get('salary'):
-        checks.append('Rémunération non publiée')
+        checks.append(tr('sources.salary_not_provided'))
     maximum = audit.get('salary_annual_max_eur')
     if profile.get('salary_min') and isinstance(maximum, (int, float)) and maximum < profile['salary_min']:
-        checks.append('Salaire annoncé sous ton minimum souhaité')
+        checks.append(tr('sources.listed_salary_is_below_your_minimum'))
     if profile.get('remote') == 'remote' and remote is False:
-        checks.append('Ce poste ne correspond pas à ton souhait de télétravail')
+        checks.append(tr('sources.this_role_does_not_match_your_remote_work'))
     return points, reasons[:3], checks
 
 
@@ -109,9 +111,9 @@ def refresh(workspace, query='', progress=None, cancelled=None):
             elif isinstance(data, dict):
                 rows = data.get('jobs') if source == 'Himalayas' else data.get('data')
             else:
-                raise ValueError('Format de source invalide.')
+                raise ValueError(tr('sources.format_de_source_invalide'))
             if not isinstance(rows, list):
-                raise ValueError('Format de source invalide.')
+                raise ValueError(tr('sources.format_de_source_invalide'))
             for raw in rows[:100]:
                 if cancelled and cancelled():
                     break
@@ -153,7 +155,7 @@ def refresh(workspace, query='', progress=None, cancelled=None):
                     'remote': raw.get('remote') if isinstance(raw.get('remote'), bool) else None,
                     'active': None, 'france_allowed': None, 'requirements_checked': False,
                     'published_at': datetime.fromtimestamp(created, timezone.utc).isoformat() if isinstance(created, (int, float)) else None,
-                    'scores': {}, 'warnings': ['Annonce issue d’un tableau employeur. Ouverture et éligibilité à vérifier.' if raw.get('employer_board') else 'Annonce issue d’un agrégateur. Ouverture et éligibilité à vérifier sur le site employeur.']})
+                    'scores': {}, 'warnings': [tr('sources.found_on_a_company_board_confirm_the_current') if raw.get('employer_board') else tr('sources.found_through_a_job_feed_check_that_the')]})
                 known[identity] = True; known_urls.add(url); imported += 1
         except (ValueError, OSError, OverflowError) as error:
             errors.append({'source': source, 'message': str(error)[:300]})
@@ -166,7 +168,7 @@ def refresh(workspace, query='', progress=None, cancelled=None):
 def recommendations(workspace, query=''):
     profile = workspace.profile()
     if not profile:
-        raise ValueError('Complète ton profil avant de chercher des offres.')
+        raise ValueError(tr('sources.complete_your_profile_before_searching_for_jobs'))
     feedback = workspace.feedback()
     jobs = workspace.store.all()
     ranked = []
@@ -189,8 +191,8 @@ def recommendations(workspace, query=''):
             ranked.append((points, job, reasons, checks))
     ranked.sort(key=lambda entry: (-entry[0], entry[1]['company']))
     return [{'id': job['id'], 'company': job['company'], 'role': job['audit'].get('title') or job['role'], 'url': job['url'],
-        'location': job['audit'].get('location') or 'Lieu à confirmer', 'salary': job['audit'].get('salary') or 'Salaire non publié',
+        'location': job['audit'].get('location') or tr('sources.location_not_provided'), 'salary': job['audit'].get('salary') or tr('sources.salary_not_provided'),
         'description': plain(job['audit'].get('description') or job['audit'].get('summary') or '')[:1100],
-        'reasons': reasons, 'checks': checks, 'source': job['audit'].get('source', 'Offre conservée'),
+        'reasons': reasons, 'checks': checks, 'source': job['audit'].get('source', tr('sources.saved_job')),
         'source_url': job['audit'].get('source_url') or job['url'], 'published_at': job['audit'].get('published_at')}
         for _, job, reasons, checks in ranked[:12]]

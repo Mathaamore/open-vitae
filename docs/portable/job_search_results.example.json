@@ -10,8 +10,8 @@
         "company": "Example",
         "role": "Python engineer",
         "url": "https://example.com/jobs/python",
-        "description": "Description sourcée à vérifier",
-        "location": "Lieu à confirmer",
+        "description": "Source description to check",
+        "location": "Location not provided",
         "salary": ""
       }
     ]

@@ -19,4 +19,4 @@ job-agent = "job_agent.main:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-job_agent = ["web/*"]
+job_agent = ["web/*", "locales/*.json"]

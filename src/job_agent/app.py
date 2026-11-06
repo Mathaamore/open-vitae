@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from .i18n import tr, system_text
+
 import json
 import secrets
 import time
@@ -69,10 +71,30 @@ def index(): return FileResponse(WEB/'index.html')
 def session(): return {'token':TOKEN}
 
 
+def present_job(value):
+    import copy
+    value=copy.deepcopy(value)
+    if value.get('preparation'):
+        value['preparation']['message']=system_text(value['preparation']['message'])
+    value['problems']=[system_text(item) for item in value.get('problems',[])]
+    audit=value.get('audit') or {}
+    audit['warnings']=[system_text(item) for item in audit.get('warnings',[])]
+    if audit.get('source') in {'Import IA · non vérifié','Imported AI suggestion · unverified'}:
+        audit['origin']='portable_ai'
+    if value.get('dossier'):
+        dossier=value['dossier']
+        dossier['missing']=[system_text(item) for item in dossier.get('missing',[])]
+        if dossier.get('form',{}).get('inspected') is False:
+            labels={item['key']:item['label'] for item in packets.fallback_fields()}
+            for field in dossier['form'].get('fields',[]):
+                if field['key'] in labels:field['label']=labels[field['key']]
+    return value
+
+
 @app.get('/api/jobs')
 def jobs():
     feedback = workspace.feedback()
-    return [{**{k:v for k,v in job.items() if k not in {'dossier','original','approved_hash'}}, 'interest': feedback.get(job['id'], {}).get('decision'), 'preparation': workspace.preparation(job['id'])} for job in store.all()]
+    return [present_job({**{k:v for k,v in job.items() if k not in {'dossier','original','approved_hash'}}, 'interest': feedback.get(job['id'], {}).get('decision'), 'preparation': workspace.preparation(job['id'])}) for job in store.all()]
 
 
 @app.get('/api/jobs/{job_id}')
@@ -87,13 +109,13 @@ def job(job_id: str):
     result['preparation'] = workspace.preparation(job_id)
     result['problems'] = store.readiness(result)
     result['history'] = store.history(job_id)
-    return result
+    return present_job(result)
 
 
 async def payload(request):
     try: data=await request.json()
-    except ValueError: raise ValueError('JSON invalide') from None
-    if not isinstance(data,dict): raise ValueError('Objet JSON requis')
+    except ValueError: raise ValueError(tr('app.json_invalide')) from None
+    if not isinstance(data,dict): raise ValueError(tr('app.objet_json_requis'))
     return data
 
 
@@ -102,9 +124,9 @@ async def save(job_id: str, request: Request):
     data = await payload(request)
     current = store.get(job_id)
     if not isinstance(data,dict) or not isinstance(data.get('answers'),dict) or not isinstance(data.get('motivation'),str):
-        raise ValueError('Answers and motivation required')
+        raise ValueError(tr('app.answers_and_motivation_required'))
     dossier = current['dossier']
-    if not dossier: raise ValueError('Prepare the dossier first')
+    if not dossier: raise ValueError(tr('app.prepare_the_dossier_first'))
     # The UI may edit answers, not eligibility, form schema, recipient or delivery plan.
     dossier['answers'] = data['answers']
     dossier['motivation'] = data['motivation']
@@ -117,7 +139,7 @@ async def save(job_id: str, request: Request):
 async def decide(job_id: str, request: Request):
     data = await payload(request)
     if data.get('choice') == 'GO':
-        raise ValueError('Mode préparation uniquement : aucun envoi depuis cette interface')
+        raise ValueError(tr('app.applications_must_be_sent_by_you_this_action'))
     store.decision(job_id,data.get('choice'),data.get('fingerprint'))
     return job(job_id)
 
@@ -134,7 +156,7 @@ def email(job_id: str):
     from .delivery import build_email
     current = store.get(job_id)
     if not current['dossier'] or current['dossier']['submission'].get('mode') != 'email':
-        raise ValueError('This dossier is not an email application')
+        raise ValueError(tr('app.this_dossier_is_not_an_email_application'))
     # Downloading a draft is preparation; it never sends mail.
     message = build_email(current,store.root,current['dossier']['submission'].get('sender',''))
     return Response(message.as_bytes(),media_type='message/rfc822',headers={'Content-Disposition':f'attachment; filename="application-{job_id}.eml"'})
@@ -144,7 +166,7 @@ def email(job_id: str):
 def document(job_id: str, filename: str):
     allowed = {'resume.pdf','resume.html','resume.json','tailoring.json','motivation.txt'}
     if filename not in allowed or job_id not in {j['id'] for j in store.all()}:
-        raise ValueError('Unknown dossier artifact')
+        raise ValueError(tr('app.unknown_dossier_artifact'))
     current = store.get(job_id)
     files = (current.get('dossier') or {}).get('attachments',[])
     pdf = next((entry['path'] for entry in files if entry.get('path','').endswith('/resume.pdf')),None)
@@ -177,22 +199,22 @@ async def suggestion(job_id: str, request: Request):
     data = await payload(request)
     current = store.get(job_id)
     if current['status'] in LOCKED or not current['dossier']:
-        raise ValueError('Ce dossier ne peut pas être modifié.')
+        raise ValueError(tr('app.this_application_cannot_be_edited'))
     if data.get('revision') != current['revision']:
-        raise ValueError('Le dossier a changé. Recharge-le avant de continuer.')
+        raise ValueError(tr('portable.this_application_has_changed_reload_it_before_continuing'))
     field = next((f for f in current['dossier'].get('form', {}).get('fields', []) if f['key'] == data.get('field')), None)
     if not field or field.get('type') in {'file', 'checkbox', 'radio', 'select'}:
-        raise ValueError('Choisis une réponse écrite dans ce dossier.')
+        raise ValueError(tr('app.choose_a_written_answer_from_this_application'))
     text, instruction = data.get('text'), data.get('instruction', '')
     if not isinstance(text, str) or not 1 <= len(text.strip()) <= 20000 or not isinstance(instruction, str) or len(instruction) > 1000:
-        raise ValueError('Texte ou consigne invalide.')
+        raise ValueError(tr('app.texte_ou_consigne_invalide'))
     context = {'company': COMPANY_CONTEXT['companies'].get(current['company']), 'role': COMPANY_CONTEXT['roles'].get(job_id)}
     profile = workspace.profile()
     if not profile:
-        raise ValueError('Complète ton profil avant de reformuler.')
+        raise ValueError(tr('app.complete_your_profile_before_requesting_a_revision'))
     def validate(result):
         if not isinstance(result.get('text'), str) or not result['text'].strip() or len(result['text']) > 20000 or not isinstance(result.get('notes'), str):
-            raise ValueError('La proposition reçue est invalide.')
+            raise ValueError(tr('assistant.the_suggested_revision_could_not_be_read_your'))
     result = await run_in_threadpool(providers.complete, 'rewrite', {'profile': {key: (value[:10000] if isinstance(value, str) else value) for key, value in profile.items() if key in {'bio','strengths','achievements','cv_text','expectations'}}, 'context': context, 'question': field.get('label'),
         'original': text, 'instruction': instruction, 'format': 'Return JSON with text and notes.'}, validator=validate)
     validate(result)
@@ -202,7 +224,7 @@ async def suggestion(job_id: str, request: Request):
 @app.get('/api/bootstrap')
 def bootstrap():
     cached = getattr(providers,'cached',None)
-    connection = cached[2] if isinstance(cached,tuple) and len(cached)==3 and not workspace.setting('local_mode',False) else {'connected':False,'provider':workspace.setting('provider'),'name':'Mode local · IA facultative'}
+    connection = cached[2] if isinstance(cached,tuple) and len(cached)==3 and not workspace.setting('local_mode',False) else {'connected':False,'provider':workspace.setting('provider'),'name':tr('app.ai_not_connected')}
     return {'connection': connection, 'onboarded': bool(workspace.profile()),
             'profile': workspace.profile_draft(),
             'onboarding': workspace.setting('onboarding_draft'),
@@ -267,7 +289,7 @@ async def portable_payload(request):
     buffer=bytearray()
     async for chunk in request.stream():
         buffer.extend(chunk)
-        if len(buffer)>1_000_000:raise ValueError('Le fichier JSON doit faire au maximum 1 Mo.')
+        if len(buffer)>1_000_000:raise ValueError(tr('portable.choose_a_json_result_file_smaller_than_1'))
     return portable.parse(bytes(buffer))
 
 
@@ -285,7 +307,7 @@ async def import_portable(request: Request):
 async def local_draft(job_id: str, request: Request):
     value=await payload(request)
     ctx=portable.context(workspace,'application_draft',job_id)
-    if value.get('revision') != ctx['job_revision'] or value.get('updated_at') != ctx['job_updated_at']:raise ValueError('Le dossier a changé. Recharge-le.')
+    if value.get('revision') != ctx['job_revision'] or value.get('updated_at') != ctx['job_updated_at']:raise ValueError(tr('app.this_application_has_changed_reload_it_before_saving'))
     data={'summary':value.get('summary',''),'motivation':value.get('motivation',''),'selected_facts':[]}
     portable.validate(workspace,{'schema_version':1,'type':'application_draft','context':ctx,'data':data})
     await run_in_threadpool(portable.draft,workspace,job_id,data,ctx['job_revision'],ctx['job_updated_at'])
@@ -337,7 +359,7 @@ async def import_profile(request: Request):
     async for part in request.stream():
         buffer.extend(part)
         if len(buffer) > 8000000:
-            raise ValueError('Le CV doit faire moins de 8 Mo.')
+            raise ValueError(tr('app.le_cv_doit_faire_moins_de_8_mo'))
     text = await run_in_threadpool(extract_resume, bytes(buffer), request.query_params.get('name', ''))
     return {'text': text, 'characters': len(text)}
 
@@ -349,10 +371,10 @@ def recommendations():
 
 def refresh_discovery(query):
     if not discovery_lock.acquire(blocking=False):
-        raise ValueError('Une recherche est déjà en cours. Tu peux suivre sa progression ou l’annuler.')
+        raise ValueError(tr('app.a_search_is_already_running_follow_its_progress'))
     discovery_cancel.clear()
     discovery_status.clear()
-    discovery_status.update({'state': 'running', 'source': 'Préparation des sources', 'completed': 0, 'imported': 0})
+    discovery_status.update({'state': 'running', 'source': tr('app.preparing_job_sources'), 'completed': 0, 'imported': 0})
     try:
         status = sources.refresh(workspace, query, discovery_status.update, discovery_cancel.is_set)
         discovery_status.update({'state': 'cancelled' if status.get('cancelled') else 'done', 'imported': status['imported']})
@@ -381,13 +403,13 @@ async def discover(request: Request):
     data = await payload(request)
     query = data.get('query', '')
     if not isinstance(query, str) or len(query) > 500:
-        raise ValueError('Recherche invalide.')
+        raise ValueError(tr('app.recherche_invalide'))
     if not workspace.profile():
-        raise ValueError('Complète ton profil avant de chercher.')
+        raise ValueError(tr('app.complete_your_profile_before_searching'))
     status = await run_in_threadpool(refresh_discovery, query)
     offers = sources.recommendations(workspace, query)
-    workspace.message('user', 'Recherche d’offres' + (': ' + query if query else ' selon mon profil'))
-    workspace.message('assistant', f"{len(offers)} pistes dans la sélection, dont {status['imported']} nouvelles offres collectées. Tu peux retenir une offre pour préparer son dossier, ou passer avec un motif pour affiner la suite.")
+    workspace.message('user', tr('app.job_search') + (': ' + query if query else tr('app.based_on_my_profile')))
+    workspace.message('assistant', tr('app.value0_jobs_in_your_selection_including_value2_new', value0=len(offers), value2=status['imported']))
     return {'search': status, 'offers': offers, 'feedback_count': len(workspace.feedback())}
 
 
@@ -395,11 +417,11 @@ def run_preparation(job_id):
     try:
         packets.prepare(workspace, providers, job_id)
     except Exception as error:
-        text = str(error) if isinstance(error, ValueError) else 'La préparation a échoué. Le dossier existant est conservé.'
+        text = str(error) if isinstance(error, ValueError) else tr('app.preparation_didn_t_finish_your_existing_materials_are')
         if not store.get(job_id)['revision']:
             try:
                 portable.draft(workspace,job_id)
-                workspace.preparation(job_id,'ready','IA indisponible. Un brouillon local modifiable a été conservé : '+text[:300])
+                workspace.preparation(job_id,'ready',tr('app.ai_assistance_is_unavailable_an_editable_draft_is')+text[:300])
                 return
             except Exception:
                 pass
@@ -410,13 +432,13 @@ def run_preparation(job_id):
 async def interest(job_id: str, request: Request, background: BackgroundTasks):
     data = await payload(request)
     if not workspace.profile():
-        raise ValueError('Complète ton profil avant de choisir une offre.')
+        raise ValueError(tr('app.complete_your_profile_before_starting_an_application'))
     current = store.get(job_id)
     if current['status'] in LOCKED:
-        raise ValueError('Cette candidature est déjà verrouillée dans le suivi.')
+        raise ValueError(tr('portable.this_application_has_a_recorded_or_uncertain_submission_2'))
     expiry = current['audit'].get('expiry')
     if data.get('decision') == 'accept' and (current['category'] in {'CLOSED','INELIGIBLE'} or isinstance(expiry, (int,float)) and expiry <= time.time()):
-        raise ValueError('Cette offre n’est plus disponible ou comporte un point bloquant documenté.')
+        raise ValueError(tr('app.this_job_is_closed_or_has_a_known'))
     workspace.decide(job_id, data.get('decision'), data.get('reason', ''))
     if data.get('decision') == 'accept' and not current['revision']:
         if workspace.setting('local_mode',False) or not workspace.setting('provider'):
@@ -431,12 +453,12 @@ async def checks(job_id: str, request: Request):
     data = await payload(request)
     current = store.get(job_id)
     if current['status'] in LOCKED or not current['dossier'] or data.get('revision') != current['revision'] or data.get('eligibility_checked') is not True or data.get('form_checked') is not True:
-        raise ValueError('Vérifie l’annonce, l’éligibilité et les questions du formulaire avant de confirmer.')
+        raise ValueError(tr('app.check_the_listing_your_eligibility_and_the_employer'))
     audit = {**current['audit'], 'active': True, 'location_allowed': True, 'requirements_checked': True,
              'manual_verification': {'by': 'user', 'at': now(), 'scope': 'opening, eligibility and application fields'}}
     store.audit(job_id, audit)
     dossier = current['dossier']
-    dossier['missing'] = [item for item in dossier.get('missing', []) if not item.startswith('Questions exactes du formulaire')]
+    dossier['missing'] = [item for item in dossier.get('missing', []) if not system_text(item).startswith('Check the exact questions')]
     store.save(job_id, dossier, current['revision'])
     return job(job_id)
 
@@ -451,19 +473,19 @@ async def chat(request: Request):
     data = await payload(request)
     text = data.get('text')
     if not isinstance(text, str) or not 1 <= len(text.strip()) <= 3000 or not workspace.profile():
-        raise ValueError('Ajoute un message de moins de 3 000 caractères et complète ton profil.')
+        raise ValueError(tr('app.complete_your_profile_and_enter_a_message_of'))
     workspace.message('user', text.strip())
     history = [{key: row[key] for key in ('role','text')} for row in workspace.messages()[-6:]]
     profile = workspace.profile()
     def validate(result):
         if not isinstance(result.get('text'), str) or not 1 <= len(result['text'].strip()) <= 8000:
-            raise ValueError('La réponse reçue est invalide. Ton profil n’a pas été changé.')
+            raise ValueError(tr('app.the_response_could_not_be_used_your_profile'))
         preference_patch(result.get('preferences'))
         query = result.get('search_query')
         if query is not None and (not isinstance(query,str) or len(query) > 180 or '@' in query or re.search(r'\d{7,}',query) or profile['name'].casefold() in query.casefold()):
-            raise ValueError('La recherche proposée contient des éléments inattendus. Aucun critère n’a été modifié.')
+            raise ValueError(tr('app.the_suggested_search_contains_unexpected_information_your_preferences'))
     result = await run_in_threadpool(providers.complete, 'conversation', {
-        'instruction': 'Return JSON with text (short conversational French answer), optional search_query (only professional role/skill terms, no name/contact/private context, only when the user asks for offers), and optional preferences (only roles array, locations array, remote enum remote/hybrid/office/flexible, expectations string). Preference changes require user confirmation: never say they are saved. Never claim search/submission has already happened. Never invent listings. Stay focused on this job search.',
+        'instruction': 'Return JSON with text (concise English answer, preserving the language of quoted user facts), optional search_query (only professional role/skill terms, no name/contact/private context, only when the user asks for offers), and optional preferences (only roles array, locations array, remote enum remote/hybrid/office/flexible, expectations string). Preference changes require user confirmation: never say they are saved. Never claim search/submission has already happened. Never invent listings. Stay focused on this job search.',
         'profile': {key: value for key, value in profile.items() if key not in {'cv_text', 'email', 'phone'}},
         'history': history, 'feedback': [{'decision': row['decision'], 'reason': row['reason']} for row in workspace.feedback().values()][-8:]}, validator=validate)
     validate(result)
@@ -472,7 +494,7 @@ async def chat(request: Request):
     if result.get('search_query'):
         search = await run_in_threadpool(refresh_discovery, result['search_query'])
         offers = sources.recommendations(workspace, result['search_query'])
-        answer += f"\n\n{len(offers)} pistes sont dans la sélection. " + ('Certaines sources sont indisponibles ; les offres conservées restent visibles.' if search['errors'] else 'Tu peux retenir celles qui méritent un dossier.')
+        answer += tr('app.value1_jobs_are_in_your_selection', value1=len(offers)) + (tr('app.some_sources_couldn_t_be_reached_your_saved') if search['errors'] else tr('app.choose_a_job_to_start_preparing_an_application'))
     workspace.message('assistant', answer)
     return {'text': answer, 'offers': offers, 'proposed_preferences': result.get('preferences'), 'profile_revision': profile['revision']}
 
@@ -482,10 +504,10 @@ async def apply_preferences(request: Request):
     data = await payload(request)
     profile = workspace.profile()
     if not profile or data.get('revision') != profile['revision']:
-        raise ValueError('Le profil a changé. Repars de ses critères actuels.')
+        raise ValueError(tr('app.your_profile_has_changed_start_again_with_the'))
     patch = preference_patch(data.get('preferences'))
     if not patch:
-        raise ValueError('Aucun critère à appliquer.')
+        raise ValueError(tr('app.there_are_no_preferences_to_update'))
     return workspace.save_profile({**profile, **patch})
 
 
@@ -500,7 +522,7 @@ async def usage_limit(request: Request):
     data = await payload(request)
     limit = data.get('limit')
     if not isinstance(limit, int) or isinstance(limit, bool) or not 1 <= limit <= 100:
-        raise ValueError('Choisis entre 1 et 100 demandes par jour.')
+        raise ValueError(tr('app.choisis_entre_1_et_100_demandes_par_jour'))
     workspace.set_setting('daily_limit', limit)
     return workspace.usage()
 

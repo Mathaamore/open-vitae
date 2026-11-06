@@ -5,6 +5,8 @@ const fs = require('node:fs');
 const path = require('node:path');
 const source = fs.readFileSync(path.join(__dirname, '../src/job_agent/web/app.js'), 'utf8').replace(/\ninit\(\);\s*$/, '');
 const context = vm.createContext({});
+vm.runInContext(fs.readFileSync(path.join(__dirname,'../src/job_agent/web/copy.en.js'),'utf8'),context);
+vm.runInContext(fs.readFileSync(path.join(__dirname,'../src/job_agent/web/i18n.js'),'utf8'),context);
 vm.runInContext(source, context);
 const evaluate = code => vm.runInContext(code, context);
 
@@ -19,7 +21,7 @@ test('views separate a prepared draft from a recorded send', () => {
 });
 test('copy uses option labels and preserves a negative answer', () => {
   assert.equal(evaluate("formatAnswer({options:[{value:'false',label:'No'}]},'false')"), 'No');
-  assert.equal(evaluate("formatAnswer({},false)"), 'Non');
+  assert.equal(evaluate("formatAnswer({},false)"), 'No');
   assert.equal(evaluate("formatAnswer({},0)"), '0');
   assert.equal(evaluate("formatAnswer({},['Python','React'])"), 'Python, React');
 });
@@ -27,7 +29,7 @@ test('source links reject executable URLs and text remains escaped', () => {
   const html = evaluate("companyContext({context:{company:{summary:'<script>bad</script>',product:'APIs',checked_on:'2026-11-05',sources:['javascript:alert(1)','https://example.com']},role:{team:null,scope:'Unknown'}}})");
   assert.ok(html.includes('&lt;script&gt;'));
   assert.ok(!html.includes('href="javascript:'));
-  assert.ok(html.includes('Équipe non confirmée'));
+  assert.ok(html.includes('Team not confirmed'));
 });
 test('receipt details tolerate a malformed historical event', () => {
   assert.equal(JSON.stringify(evaluate("eventDetails({details:'broken'})")), '{}');
@@ -47,4 +49,14 @@ test('short answers use native inputs and long answers remain editable textareas
   assert.ok(narrative.includes('<textarea'));
   assert.ok(narrative.includes('data-word-limit="200"'));
   assert.ok(narrative.includes('readonly'));
+});
+test('English fallback and interpolation preserve source text', () => {
+  const key = evaluate('Object.keys(OV_COPY)[0]');
+  const original = evaluate(`t(${JSON.stringify(key)})`);
+  evaluate("I18n.register('test', {sample:'Review {source}'})");
+  evaluate("I18n.setLocale('test')");
+  assert.equal(evaluate(`t(${JSON.stringify(key)})`), original);
+  assert.equal(evaluate("t('sample',{source:'Mon CV $& <br>'})"), 'Review Mon CV $& <br>');
+  evaluate("I18n.setLocale('unknown')");
+  assert.equal(evaluate('I18n.locale'), 'en');
 });

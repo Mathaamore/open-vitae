@@ -8,12 +8,12 @@
     "job_updated_at": "example"
   },
   "data": {
-    "summary": "Analyse à relire",
+    "summary": "A job analysis to review",
     "strengths": [
-      "Un lien avec les faits"
+      "A connection to the documented experience"
     ],
     "uncertainties": [
-      "Éligibilité à vérifier"
+      "Eligibility to check"
     ],
     "sources": [
       "https://example.com/jobs/python"

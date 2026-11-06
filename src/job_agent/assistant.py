@@ -1,4 +1,6 @@
 """Local Codex app-server client. No credentials or model output enter the dossier automatically."""
+
+from .i18n import tr
 import atexit
 import json
 import os
@@ -18,7 +20,7 @@ class AssistantError(ValueError):
 def login_url(value):
     url = urlparse(value)
     if url.scheme != 'https' or url.hostname not in {'auth.openai.com', 'chatgpt.com'} or url.username or url.password:
-        raise AssistantError('Adresse de connexion OpenAI inattendue.')
+        raise AssistantError(tr('assistant.adresse_de_connexion_openai_inattendue'))
     return value
 
 
@@ -47,7 +49,7 @@ class CodexAssistant:
             return
         binary = self.binary()
         if not binary:
-            raise AssistantError('Codex est introuvable. Utilise la version Mac qui inclut Codex.')
+            raise AssistantError(tr('assistant.codex_est_introuvable_utilise_la_version_mac_qui'))
         self.home.mkdir(parents=True, exist_ok=True, mode=0o700)
         if self.home.stat().st_mode & 0o7777 != 0o700:
             self.home.chmod(0o700)
@@ -65,7 +67,7 @@ class CodexAssistant:
             self.process = subprocess.Popen(args, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                             stderr=subprocess.DEVNULL, text=True, cwd=work, env=env)
         except OSError:
-            raise AssistantError('Le service Codex n’a pas pu démarrer.') from None
+            raise AssistantError(tr('assistant.couldn_t_start_the_chatgpt_connection_try_reconnecting')) from None
         self.reader = threading.Thread(target=self.read, args=(self.process,), daemon=True)
         self.reader.start()
         self.request('initialize', {'clientInfo': {'name': 'candidatures_local', 'title': 'Open Vitæ', 'version': '0.3.1'}})
@@ -77,7 +79,7 @@ class CodexAssistant:
                 self.process.stdin.write(json.dumps(value) + '\n')
                 self.process.stdin.flush()
             except (OSError, AttributeError):
-                raise AssistantError('La connexion au service Codex a été interrompue.') from None
+                raise AssistantError(tr('assistant.the_chatgpt_connection_was_interrupted_reconnect_and_try')) from None
 
     def read(self, process):
         try:
@@ -97,7 +99,7 @@ class CodexAssistant:
                 else:
                     if value.get('method') == 'account/login/completed':
                         self.login_id = None
-                        self.login_error = None if value.get('params', {}).get('success') else 'La connexion n’a pas abouti. Réessaie.'
+                        self.login_error = None if value.get('params', {}).get('success') else tr('assistant.sign_in_didn_t_finish_try_connecting_again')
                     self.events.put(value)
         finally:
             with self.lock:
@@ -115,9 +117,9 @@ class CodexAssistant:
             try:
                 response = target.get(timeout=timeout)
             except queue.Empty:
-                raise AssistantError('Le service Codex met trop de temps à répondre. Réessaie.') from None
+                raise AssistantError(tr('assistant.chatgpt_is_taking_too_long_to_respond_try')) from None
             if 'error' in response:
-                raise AssistantError('Codex n’a pas pu terminer cette action. Vérifie ta connexion et réessaie.')
+                raise AssistantError(tr('assistant.chatgpt_couldn_t_complete_this_request_check_the'))
             return response['result']
         finally:
             with self.lock:
@@ -159,18 +161,18 @@ class CodexAssistant:
             {'type': 'object', 'properties': {'text': {'type': 'string'}, 'notes': {'type': 'string'}}, 'required': ['text', 'notes'], 'additionalProperties': False})
         result.pop('_model', None); result.pop('_usage', None)
         if not isinstance(result.get('text'), str) or not result['text'].strip() or not isinstance(result.get('notes'), str):
-            raise AssistantError('La proposition reçue est invalide.')
+            raise AssistantError(tr('assistant.the_suggested_revision_could_not_be_read_your'))
         return result
 
     def complete(self, content, instructions, schema=None, max_output=1600):
         if not self.operation.acquire(blocking=False):
-            raise AssistantError('Une demande est déjà en cours. Attends sa réponse.')
+            raise AssistantError(tr('assistant.a_request_is_already_running_wait_for_it'))
         thread_id = None
         try:
             self.start()
             account = self.request('account/read', {'refreshToken': False}).get('account') or {}
             if account.get('type') != 'chatgpt':
-                raise AssistantError('Connecte ton compte ChatGPT avant de demander une proposition.')
+                raise AssistantError(tr('assistant.connecte_ton_compte_chatgpt_avant_de_demander_une'))
             while not self.events.empty():
                 self.events.get_nowait()
             catalog = self.request('model/list', {'includeHidden': False}).get('data', [])
@@ -205,15 +207,15 @@ class CodexAssistant:
                     answer = params['item'].get('text')
                 if event.get('method') == 'turn/completed':
                     if params.get('turn', {}).get('status') != 'completed':
-                        raise AssistantError('La génération n’a pas abouti. Vérifie l’accès de ton compte et ses limites d’usage.')
+                        raise AssistantError(tr('assistant.the_request_didn_t_finish_check_your_account'))
                     try:
                         output = json.loads(answer or '')
                     except ValueError:
-                        raise AssistantError('La réponse reçue est inutilisable. Ton texte d’origine est conservé.') from None
+                        raise AssistantError(tr('assistant.the_response_could_not_be_used_your_original')) from None
                     if not isinstance(output, dict) or len(json.dumps(output)) > 40000:
-                        raise AssistantError('La réponse reçue est invalide.')
+                        raise AssistantError(tr('assistant.the_response_could_not_be_read_try_again'))
                     return {**output, '_model': model or result.get('model', 'catalogue Codex'), '_usage': usage}
-            raise AssistantError('La génération a dépassé deux minutes. Ton texte d’origine est conservé.')
+            raise AssistantError(tr('assistant.the_request_timed_out_after_two_minutes_your'))
         finally:
             # Stop any timed-out turn and discard its isolated, ephemeral workspace.
             if thread_id:

@@ -25,8 +25,8 @@ def main():
             page=browser.new_page(viewport={'width':1440,'height':1000})
             errors=[];page.on('pageerror',lambda error:errors.append(str(error)))
             url=f'http://127.0.0.1:{server.server_port}'
-            page.goto(url);expect(page.locator('h1')).to_contain_text('Trouve la bonne opportunité')
-            expect(page.locator('#release-status')).to_contain_text('Aucun installateur public')
+            page.goto(url);expect(page.locator('h1')).to_contain_text('Find work')
+            expect(page.locator('#release-status')).to_contain_text('No verified public installer')
             assert page.locator('.product>img').evaluate('(image)=>image.complete && image.naturalWidth>0')
             page.screenshot(path=str(output/'landing-desktop.png'),full_page=True)
             for width in (390,768,1024):
@@ -44,7 +44,7 @@ def main():
             release={'verified':True,'version':'1.2.3','url':'https://github.com/Mathaamore/open-vitae/releases/download/v1.2.3/Open-vitae-Mac.dmg'}
             page.route('**/release.json',lambda route:route.fulfill(json=release))
             page.reload();expect(page.locator('[data-download]')).to_have_attribute('href',release['url'])
-            page.goto(url+'/404.html');expect(page.locator('h1')).to_contain_text('Cette piste')
+            page.goto(url+'/404.html');expect(page.locator('h1')).to_contain_text('This page isn’t here.')
             assert not errors,errors
             browser.close()
         print('Landing passed: responsive, light/dark, reduced motion, real assets, honest availability, verified release URL checks, custom 404.')

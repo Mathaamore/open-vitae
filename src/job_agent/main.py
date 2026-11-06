@@ -1,4 +1,4 @@
-"""Development entry point; the Mac app starts the same service without a terminal."""
+'Development entry item; the Mac app starts the same service without a terminal.'
 import argparse
 import os
 from pathlib import Path

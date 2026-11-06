@@ -13,7 +13,7 @@ A native Mac window wraps a loopback-only FastAPI service. SQLite and documents 
 | `opportunities.py`, `portable.py` | Canonical manual jobs, explicit public metadata retrieval, local drafts, portable artifact validation/prompting and private backups |
 | `web/` | Onboarding, conversation, suggestions, dossiers and tracking UI |
 | `migrations.py` | Integrity checks, private backups before schema changes and newer-schema protection |
-| `site/` | Independent static French website, Vercel configuration and curated verified-release link |
+| `site/` | Independent static English website, Vercel configuration and curated verified-release link |
 | `macos/` | Native shell, packaged service launcher and local build script |
 | `tests/`, `scripts/check_product_ui.py` | Fictional fixtures, unit checks and isolated browser journey |
 | `design/brand/open-vitae/` | Logo masters, font notice and brand guide |

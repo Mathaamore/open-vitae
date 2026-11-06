@@ -2,7 +2,7 @@
 
 Offline-first features now include manual URL/text jobs, favorites, editable local drafts/PDFs, four portable AI artifact types, preview/confirm imports, canonical URL deduplication and private exports/backups. Integrated providers are optional.
 
-Current preview includes resumable local profile drafts, cancellable feed discovery, configured Greenhouse/Lever/Ashby boards, system dark appearance and an isolated French static website. Release candidates have Sparkle/signing/notarization/DMG tooling; no public acceptance is implied.
+Current preview includes resumable local profile drafts, cancellable feed discovery, configured Greenhouse/Lever/Ashby boards, system dark appearance and an isolated English static website. Release candidates have Sparkle/signing/notarization/DMG tooling; no public acceptance is implied.
 
 Existing workflows: local onboarding, provider connection, public-feed discovery, explicit offer feedback, factual dossier preparation and manual submission tracking.
 

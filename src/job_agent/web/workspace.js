@@ -7,15 +7,15 @@
     provider = value;
     document.querySelectorAll('[data-provider]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.provider === provider)));
     const item = bootstrap?.providers?.find(item => item.id === provider);
-    el('provider-mode').textContent = item?.mode || 'Compte ChatGPT';
-    el('provider-description').textContent = item?.description || 'Connexion dans le navigateur. Les limites de ton forfait s’appliquent.';
+    el('provider-mode').textContent = item?.mode || t("workspace.chatgpt_account");
+    el('provider-description').textContent = item?.description || t("workspace.sign_in_through_your_browser_your_account_s");
     el('provider-key-label').hidden = provider === 'chatgpt'; el('provider-key').value = '';
-    el('connect-provider').textContent = provider === 'chatgpt' ? 'Se connecter avec ChatGPT ↗' : 'Connecter ' + (item?.name || provider);
+    el('connect-provider').textContent = provider === 'chatgpt' ? "Sign in with ChatGPT ↗" : 'Connecter ' + (item?.name || provider);
     el('connect-provider').hidden = false; el('connect-provider').disabled = false;
     el('oauth-continue').hidden = true; el('connection-check').hidden = true;
   }
   function showConnection(returnable = false) {
-    clearInterval(connectionTimer); el('workspace-root').hidden = true; el('welcome').hidden = false;
+    el('optional-ai').open=returnable; clearInterval(connectionTimer); el('workspace-root').hidden = true; el('welcome').hidden = false;
     el('connection-step').hidden = false; el('profile-step').hidden = true;
     el('return-workspace').hidden = !returnable; providerChoice(bootstrap?.connection?.provider || 'chatgpt');
     el('connection-title').focus();
@@ -28,15 +28,15 @@
   function profileStep(value) {
     step = value;
     document.querySelectorAll('[data-profile-step]').forEach(node => node.hidden = Number(node.dataset.profileStep) !== step);
-    el('profile-step-caption').textContent = ['Ton parcours', 'Ta recherche', 'Ce qu’on doit retenir'][step] + ' · ' + (step + 1) + ' sur 3';
-    el('profile-title').textContent = ['On part de ton histoire.', 'Où veux-tu aller ?', 'Ce qui te rend utile.'][step];
+    el('profile-step-caption').textContent = [t("workspace.your_experience"), t("workspace.your_next_role"), t("workspace.your_strengths")][step] + ' · ' + (step + 1) + ' of 3';
+    el('profile-title').textContent = [t("workspace.start_with_your_experience"), t("workspace.what_are_you_looking_for"), t("workspace.what_do_you_bring_to_the_work")][step];
     el('profile-progress').textContent = (step + 1) + ' / 3';
     el('profile-previous').hidden = step === 0; el('profile-next').hidden = step === 2; el('profile-save').hidden = step !== 2;
-    el('profile-save').textContent = bootstrap?.onboarded ? 'Enregistrer mon profil' : 'Créer mon espace →';
+    el('profile-save').textContent = bootstrap?.onboarded ? t("workspace.save_profile") : "Create my workspace →";
     if (!bootstrap?.onboarded && !el('profile-step').hidden) queueDraft();
   }
   function editProfile() {
-    if (typeof dirty !== 'undefined' && dirty) { message('Enregistre ou annule les modifications du dossier avant de modifier ton profil.', true); return; }
+    if (typeof dirty !== 'undefined' && dirty) { message(t("workspace.save_or_discard_your_application_changes_before_editing"), true); return; }
     el('workspace-root').hidden = true; el('welcome').hidden = false; el('connection-step').hidden = true; el('profile-step').hidden = false;
     el('profile-cancel').hidden = !bootstrap?.onboarded; fillProfile(bootstrap?.onboarded ? profile : bootstrap?.onboarding?.fields || profile); profileStep(bootstrap?.onboarded ? 0 : bootstrap?.onboarding?.step || 0); gateMessage(''); window.scrollTo(0,0);
   }
@@ -49,21 +49,21 @@
   async function checkConnection() {
     try {
       const status = await api('/api/providers');
-      if (!status.connected) { gateMessage(status.error || 'Termine la connexion dans le navigateur, puis reviens ici.'); return; }
+      if (!status.connected) { gateMessage(status.error || t("workspace.finish_signing_in_through_your_browser_then_check")); return; }
       clearInterval(connectionTimer); bootstrap = await api('/api/bootstrap'); profile = bootstrap.profile || {};
       if (bootstrap.onboarded) activate(); else editProfile();
     } catch (error) { gateMessage(error.message, true); }
   }
   async function connect() {
-    el('connect-provider').disabled = true; gateMessage('Vérification de la connexion…');
+    el('connect-provider').disabled = true; gateMessage(t("workspace.checking_connection"));
     try {
       const result = await api('/api/providers/connect', {method:'POST', body:JSON.stringify({provider, key:el('provider-key').value || undefined})});
       el('provider-key').value = '';
       if (result.url) {
         const url = new URL(result.url);
-        if (url.protocol !== 'https:' || !['auth.openai.com','chatgpt.com'].includes(url.hostname)) throw Error('Adresse de connexion inattendue.');
+        if (url.protocol !== 'https:' || !['auth.openai.com','chatgpt.com'].includes(url.hostname)) throw Error(t("workspace.the_sign_in_link_could_not_be_verified"));
         el('oauth-continue').href = url.href; el('oauth-continue').hidden = false; el('connection-check').hidden = false; el('connect-provider').hidden = true;
-        gateMessage('Continue sur OpenAI dans ton navigateur. L’app attend ta connexion.');
+        gateMessage(t("workspace.continue_in_your_browser_then_return_here_to"));
         let polls = 0; connectionTimer = setInterval(() => { if (++polls > 90 || el('welcome').hidden) clearInterval(connectionTimer); else checkConnection(); }, 2000);
       } else await checkConnection();
     } catch (error) { gateMessage(error.message, true); }
@@ -74,18 +74,18 @@
     clearTimeout(draftTimer);
     draftTimer = setTimeout(async () => {
       const draft = {step, fields:Object.fromEntries(new FormData(el('profile-form')))};
-      try { await api('/api/profile/onboarding', {method:'PUT', body:JSON.stringify(draft)}); bootstrap.onboarding=draft; el('draft-status').textContent='Brouillon enregistré sur ce Mac. Tu peux reprendre plus tard.'; }
-      catch (error) { el('draft-status').textContent='Brouillon non enregistré : '+error.message; }
+      try { await api('/api/profile/onboarding', {method:'PUT', body:JSON.stringify(draft)}); bootstrap.onboarding=draft; el('draft-status').textContent=t("workspace.progress_saved_you_can_pick_this_up_later"); }
+      catch (error) { el('draft-status').textContent=t("workspace.couldn_t_save_your_progress")+error.message; }
     }, 350);
   }
   async function importCV(file = el('cv-upload').files[0]) {
     if (!file) return;
-    if (file.size > 8000000) { el('cv-import-status').textContent = 'Le fichier doit faire moins de 8 Mo.'; return; }
-    el('cv-import-status').textContent = 'Lecture du CV sur cet ordinateur…'; el('cv-upload').disabled = true;
+    if (file.size > 8000000) { el('cv-import-status').textContent = t("workspace.choose_a_cv_smaller_than_8_mb"); return; }
+    el('cv-import-status').textContent = t("workspace.reading_your_cv"); el('cv-upload').disabled = true;
     try {
       const result = await api('/api/profile/import?name=' + encodeURIComponent(file.name), {method:'POST', headers:{'Content-Type':'application/octet-stream'}, body:await file.arrayBuffer()});
       el('profile-form').elements.namedItem('cv_text').value = result.text; window.profileDirty = true; queueDraft();
-      el('cv-import-status').textContent = `${result.characters.toLocaleString('fr')} caractères extraits, sans appel IA. Tu peux relire et corriger le texte.`;
+      el('cv-import-status').textContent = `${result.characters.toLocaleString('en')} characters imported. Review the text and correct any errors.`;
     } catch (error) { el('cv-import-status').textContent = error.message; }
     finally { el('cv-upload').disabled = false; }
   }
@@ -94,69 +94,69 @@
     data.roles = data.roles.split(',').map(value => value.trim()).filter(Boolean); data.locations = data.locations.split(',').map(value => value.trim()).filter(Boolean);
     data.strict_constraints = form.elements.namedItem('strict_constraints').checked;
     data.salary_min = data.salary_min ? Number(data.salary_min) : null;
-    el('profile-save').disabled = true; gateMessage('Enregistrement du profil…');
+    el('profile-save').disabled = true; gateMessage(t("workspace.saving_profile"));
     try { profile = await api('/api/profile', {method:'PUT', body:JSON.stringify(data)}); bootstrap.onboarded = true; bootstrap.profile = profile; window.profileDirty = false; activate(); }
     catch (error) { gateMessage(error.message, true); }
     finally { el('profile-save').disabled = false; }
   }
   function go(screen) {
-    if (typeof dirty !== 'undefined' && dirty) { message('Enregistre ou annule tes modifications avant de changer de vue.', true); return false; }
+    if (typeof dirty !== 'undefined' && dirty) { message(t("workspace.save_or_discard_your_changes_before_leaving_this"), true); return false; }
     if (current) home();
     ['explore','dashboard','settings-screen','tools-screen'].forEach(id => el(id).hidden = id !== screen);
     el('review').hidden = true;
     document.querySelectorAll('[data-screen]').forEach(button => { if (button.dataset.screen === screen) button.setAttribute('aria-current','page'); else button.removeAttribute('aria-current'); });
-    el('screen-title').textContent = {explore:'Recherche',dashboard:'Candidatures','settings-screen':'Connexion et usage','tools-screen':'Utiliser mon IA'}[screen];
+    el('screen-title').textContent = {explore:t("workspace.discover"),dashboard:t("app.applications"),'settings-screen':t("workspace.ai_and_usage"),'tools-screen':t("workspace.use_your_own_ai")}[screen];
     message(''); if(screen==='tools-screen')window.LocalTools?.enter(); if (screen === 'settings-screen') loadSettings(); window.scrollTo(0,0); return true;
   }
-  function note(text, role) { const node = document.createElement('div'); node.className = 'chat-message ' + role; const label = document.createElement('span'); label.className='sr-only';label.textContent=role==='user'?'Toi : ':'Assistant : '; const body=document.createElement('p');body.textContent=text;node.append(label,body);el('chat-log').append(node); }
+  function note(text, role) { const node = document.createElement('div'); node.className = 'chat-message ' + role; const label = document.createElement('span'); label.className='sr-only';label.textContent=role==='user'?"You: ":"Assistant: "; const body=document.createElement('p');body.textContent=text;node.append(label,body);el('chat-log').append(node); }
   async function loadChat() {
     const data = await api('/api/chat');el('chat-log').replaceChildren(); data.messages.forEach(item => note(item.text,item.role)); el('chat-empty').hidden = data.messages.length > 0;
     el('chat-log').scrollTop = el('chat-log').scrollHeight;
   }
   async function sendChat(event) {
-    event.preventDefault(); if(!bootstrap.connection.connected){window.LocalTools.open('profile_analysis');message('Crée un prompt local pour ton IA, ou connecte un fournisseur depuis Connexion et usage.');return;} const text=el('chat-input').value.trim();if (!text || chatBusy) return;
+    event.preventDefault(); if(!bootstrap.connection.connected){window.LocalTools.open('profile_analysis');message(t("workspace.create_a_prompt_for_your_own_ai_or"));return;} const text=el('chat-input').value.trim();if (!text || chatBusy) return;
     chatBusy=true;el('chat-send').disabled=true;el('chat-input').value='';el('chat-empty').hidden=true;note(text,'user');
-    const pending=document.createElement('p');pending.className='chat-pending';pending.textContent='Réflexion en cours…';pending.setAttribute('role','status');el('chat-log').append(pending);
+    const pending=document.createElement('p');pending.className='chat-pending';pending.textContent=t("workspace.working_on_your_request");pending.setAttribute('role','status');el('chat-log').append(pending);
     try { const result=await api('/api/chat',{method:'POST',body:JSON.stringify({text})});note(result.text,'assistant');if(result.offers)offers({offers:result.offers});if(result.proposed_preferences)proposePreferences(result.proposed_preferences,result.profile_revision); }
     catch(error){el('chat-input').value=text;message(error.message,true);}
     finally{pending.remove();chatBusy=false;el('chat-send').disabled=false;el('chat-log').scrollTop=el('chat-log').scrollHeight;loadUsage();}
   }
   function proposePreferences(patch, revision) {
     const box=document.createElement('div');box.className='preference-proposal';
-    const title=document.createElement('strong');title.textContent='Critères proposés';box.append(title);
-    const labels={roles:'Postes',locations:'Lieux',remote:'Organisation',expectations:'Attentes'};
-    for(const [key,value] of Object.entries(patch)){const line=document.createElement('p');line.textContent=(labels[key]||key)+' : '+(Array.isArray(value)?value.join(', '):({remote:'Télétravail',hybrid:'Hybride',office:'Sur place',flexible:'Flexible'}[value]||value));box.append(line);}
-    const button=document.createElement('button');button.textContent='Appliquer ces critères';box.append(button);
-    button.onclick=async()=>{button.disabled=true;try{profile=await api('/api/profile/preferences',{method:'POST',body:JSON.stringify({preferences:patch,revision})});bootstrap.profile=profile;updateProfileDisplay();await loadOffers();button.textContent='Critères enregistrés';}catch(error){message(error.message,true);button.disabled=false;}};
+    const title=document.createElement('strong');title.textContent=t("workspace.suggested_preferences");box.append(title);
+    const labels={roles:'Postes',locations:'Lieux',remote:t("app.work_arrangement"),expectations:'Attentes'};
+    for(const [key,value] of Object.entries(patch)){const line=document.createElement('p');line.textContent=(labels[key]||key)+' : '+(Array.isArray(value)?value.join(', '):({remote:t("workspace.remote"),hybrid:t("workspace.hybrid"),office:t("workspace.on_site"),flexible:t("workspace.flexible")}[value]||value));box.append(line);}
+    const button=document.createElement('button');button.textContent=t("workspace.apply_preferences");box.append(button);
+    button.onclick=async()=>{button.disabled=true;try{profile=await api('/api/profile/preferences',{method:'POST',body:JSON.stringify({preferences:patch,revision})});bootstrap.profile=profile;updateProfileDisplay();await loadOffers();button.textContent=t("workspace.preferences_updated");}catch(error){message(error.message,true);button.disabled=false;}};
     el('chat-log').append(box);
   }
   function offerMarkup(offer) {
-    const location=typeof offer.location==='string'?offer.location:offer.location?.name||'Lieu à confirmer';
-    const salary=typeof offer.salary==='string'?offer.salary:offer.salary?.salary_display||'Salaire à confirmer';
+    const location=typeof offer.location==='string'?offer.location:offer.location?.name||t("app.location_not_provided");
+    const salary=typeof offer.salary==='string'?offer.salary:offer.salary?.salary_display||t("app.salary_not_provided");
     const url=offer.source_url?.startsWith('https://')?offer.source_url:offer.url;
-    return `<article class="offer-suggestion"><div class="offer-company"><span>${esc(offer.company)}</span><a href="${esc(offer.url)}" target="_blank" rel="noopener noreferrer" aria-label="Voir l’annonce ${esc(offer.company)}">↗</a></div><h3>${esc(offer.role)}</h3><p class="offer-conditions">${esc(location)}<span aria-hidden="true"> · </span>${esc(salary)}</p>${offer.description?`<p class="offer-excerpt">${esc(offer.description)}</p>`:''}<ul class="match-reasons">${offer.reasons.map(reason=>`<li>${esc(reason)}</li>`).join('')}</ul><details class="offer-checks"><summary>À vérifier avant de postuler</summary><ul>${offer.checks.map(check=>`<li>${esc(check)}</li>`).join('')}</ul></details><div class="offer-choices"><button class="primary" data-interest="accept" data-id="${esc(offer.id)}">Ça m’intéresse <span aria-hidden="true">→</span></button><button class="quiet" data-interest="later" data-id="${esc(offer.id)}">Garder</button><button class="quiet" data-interest="reject" data-id="${esc(offer.id)}">Passer</button><label class="rejection-reason"><span class="sr-only">Motif pour affiner la recherche</span><select data-reason="${esc(offer.id)}" aria-label="Motif du refus pour ${esc(offer.company)}"><option value="">Un motif ?</option><option value="role">Le poste</option><option value="location">Le lieu</option><option value="salary">Le salaire</option><option value="company">L’entreprise</option></select></label></div><p class="offer-source">Source : <a href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(offer.source)}</a> · ${offer.published_at?'Publié le '+esc(date(offer.published_at)):'Date de publication inconnue'}</p></article>`;
+    return `<article class="offer-suggestion"><div class="offer-company"><span>${esc(offer.company)}</span><a href="${esc(offer.url)}" target="_blank" rel="noopener noreferrer" aria-label="View listing ${esc(offer.company)}">↗</a></div><h3>${esc(offer.role)}</h3><p class="offer-conditions">${esc(location)}<span aria-hidden="true"> · </span>${esc(salary)}</p>${offer.description?`<p class="offer-excerpt">${esc(offer.description)}</p>`:''}<ul class="match-reasons">${offer.reasons.map(reason=>`<li>${esc(reason)}</li>`).join('')}</ul><details class="offer-checks"><summary>${esc(t("app.before_you_apply"))}</summary><ul>${offer.checks.map(check=>`<li>${esc(check)}</li>`).join('')}</ul></details><div class="offer-choices"><button class="primary" data-interest="accept" data-id="${esc(offer.id)}">${esc(t("app.prepare_application"))} <span aria-hidden="true">→</span></button><button class="quiet" data-interest="later" data-id="${esc(offer.id)}">${esc(t("workspace.save"))}</button><button class="quiet" data-interest="reject" data-id="${esc(offer.id)}">${esc(t("app.dismiss"))}</button><label class="rejection-reason"><span class="sr-only">${esc(t("workspace.reason_for_dismissing"))}</span><select data-reason="${esc(offer.id)}" aria-label="Dismissal reason for ${esc(offer.company)}"><option value="">${esc(t("workspace.reason_optional"))}</option><option value="role">${esc(t("workspace.role"))}</option><option value="location">${esc(t("app.location"))}</option><option value="salary">${esc(t("app.salary"))}</option><option value="company">${esc(t("app.company"))}</option></select></label></div><p class="offer-source">${esc(t("workspace.source"))} <a href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(offer.source)}</a> · ${offer.published_at?"Published "+esc(date(offer.published_at)):t("workspace.publication_date_not_provided")}</p></article>`;
   }
   function offers(data) {
     const items=data.offers||[];el('recommendation-count').textContent=items.length?String(items.length):'';
-    el('recommendations-list').innerHTML=items.length?items.map(offerMarkup).join(''):'<div class="empty-state"><strong>Pas de nouvelle piste dans cette sélection.</strong><p>Tu peux modifier tes critères ou relancer une recherche. Tes dossiers restent dans Candidatures.</p></div>';
-    el('recommendation-note').textContent=data.feedback_count?`Le tri tient compte de tes ${data.feedback_count} choix.`:'Accepte une piste pour préparer son dossier.';
+    el('recommendations-list').innerHTML=items.length?items.map(offerMarkup).join(''):`<div class="empty-state"><strong>${esc(t("workspace.no_new_matches_yet"))}</strong><p>${esc(t("workspace.try_different_preferences_or_check_again_later_your"))}</p></div>`;
+    el('recommendation-note').textContent=data.feedback_count?`Based on ${data.feedback_count} choices you’ve made.`:t("workspace.choose_a_job_to_prepare_an_application");
   }
   async function loadOffers(){offers(await api('/api/recommendations'));}
   async function search() {
     if(searchBusy || chatBusy)return;searchBusy=true;['first-search','search-offers','refresh-offers'].forEach(id=>el(id).disabled=true);
-    el('recommendation-note').textContent='Consultation des sources…';
+    el('recommendation-note').textContent=t("workspace.checking_job_sources");
     el('cancel-search').hidden=false; el('search-progress').hidden=false; el('search-progress').setAttribute('aria-busy','true');
-    const poll=setInterval(async()=>{try{const state=await api('/api/discovery/status');if(state.state==='running'){el('search-progress-text').textContent=`${state.source} · ${state.completed} source(s) consultée(s) · ${state.imported} offre(s) collectée(s)`;await loadOffers();}}catch{}},1500);
-    try {const result=await api('/api/discovery',{method:'POST',body:JSON.stringify({query:el('chat-input').value.trim()})});offers(result);await refreshJobs();await loadChat();const errors=result.search.errors||[];message(result.search.cancelled?'Recherche arrêtée. Les offres déjà collectées restent disponibles.':errors.length?'Recherche terminée. Certaines sources sont indisponibles ; les pistes conservées restent visibles.':result.search.cached?'Sélection réutilisée : les sources se mettent à jour quotidiennement.':`${result.search.imported} nouvelles offres ajoutées. Le tri n’a utilisé aucun appel IA.`);}
-    catch(error){message(error.message,true);el('recommendation-note').textContent='Recherche interrompue. Tu peux réessayer.';}
+    const poll=setInterval(async()=>{try{const state=await api('/api/discovery/status');if(state.state==='running'){el('search-progress-text').textContent=`${state.source} · ${state.completed} sources checked · ${state.imported} jobs found`;await loadOffers();}}catch{}},1500);
+    try {const result=await api('/api/discovery',{method:'POST',body:JSON.stringify({query:el('chat-input').value.trim()})});offers(result);await refreshJobs();await loadChat();const errors=result.search.errors||[];message(result.search.cancelled?t("workspace.search_stopped_jobs_already_found_are_still_available"):errors.length?t("workspace.search_finished_some_sources_couldn_t_be_reached"):result.search.cached?t("workspace.showing_your_recent_results_sources_refresh_daily"):`${result.search.imported} new jobs added.`);}
+    catch(error){message(error.message,true);el('recommendation-note').textContent=t("workspace.search_interrupted_try_again_when_you_re_ready");}
     finally{clearInterval(poll);el('cancel-search').hidden=true;el('search-progress').hidden=true;el('search-progress').setAttribute('aria-busy','false');searchBusy=false;['first-search','search-offers','refresh-offers'].forEach(id=>el(id).disabled=false);}
   }
   async function interest(button) {
     const identity=button.dataset.id,decision=button.dataset.interest;button.disabled=true;
     const reason=[...document.querySelectorAll('[data-reason]')].find(node=>node.dataset.reason===identity)?.value||'';
-    try {await api('/api/jobs/'+encodeURIComponent(identity)+'/interest',{method:'POST',body:JSON.stringify({decision,reason})});await Promise.all([loadOffers(),refreshJobs()]);message(decision==='later'?'Offre conservée dans tes favoris.':decision==='accept'?'Offre retenue. La préparation apparaîtra dans Candidatures.':'Offre écartée. Le motif, si tu en as choisi un, affine la sélection.');if(decision==='reject'){
-      const undo=document.createElement('button');undo.textContent='Annuler';undo.className='undo-button';
-      undo.onclick=async()=>{undo.disabled=true;try{await api('/api/jobs/'+encodeURIComponent(identity)+'/interest',{method:'POST',body:JSON.stringify({decision:'reset'})});await Promise.all([loadOffers(),refreshJobs()]);message('Choix annulé. Cette offre est à nouveau dans la sélection.');}catch(error){message(error.message,true);}};
+    try {await api('/api/jobs/'+encodeURIComponent(identity)+'/interest',{method:'POST',body:JSON.stringify({decision,reason})});await Promise.all([loadOffers(),refreshJobs()]);message(decision==='later'?t("workspace.job_saved"):decision==='accept'?t("workspace.application_started_find_your_draft_in_applications"):t("workspace.job_dismissed_your_feedback_helps_refine_future_suggestions"));if(decision==='reject'){
+      const undo=document.createElement('button');undo.textContent=t("workspace.undo");undo.className='undo-button';
+      undo.onclick=async()=>{undo.disabled=true;try{await api('/api/jobs/'+encodeURIComponent(identity)+'/interest',{method:'POST',body:JSON.stringify({decision:'reset'})});await Promise.all([loadOffers(),refreshJobs()]);message(t("workspace.job_restored_to_your_suggestions"));}catch(error){message(error.message,true);}};
       el('message').append(undo);
     }pollPreparations();}
     catch(error){message(error.message,true);button.disabled=false;}
@@ -164,17 +164,16 @@
   function pollPreparations(){
     clearInterval(preparationTimer);
     if(!jobs.some(job=>['queued','preparing'].includes(job.preparation?.state)))return;
-    preparationTimer=setInterval(async()=>{if(document.hidden)return;try{await refreshJobs();if(!jobs.some(job=>['queued','preparing'].includes(job.preparation?.state))){clearInterval(preparationTimer);await loadUsage();message('La file de préparation est à jour. Les dossiers et éventuels points à compléter sont dans Candidatures.');}}catch(error){clearInterval(preparationTimer);message(error.message,true);}},4000);
+    preparationTimer=setInterval(async()=>{if(document.hidden)return;try{await refreshJobs();if(!jobs.some(job=>['queued','preparing'].includes(job.preparation?.state))){clearInterval(preparationTimer);await loadUsage();message(t("workspace.preparation_finished_review_your_materials_in_applications"));}}catch(error){clearInterval(preparationTimer);message(error.message,true);}},4000);
   }
-  async function loadUsage(){try{const data=await api('/api/usage');el('usage-summary').textContent=`Mode économe · ${data.requests} / ${data.limit} demandes IA aujourd’hui · tri local`;el('daily-limit').value=data.limit;const tokens=data.runs.map(run=>run.usage?.totalTokens ?? run.usage?.totalTokenCount ?? (typeof run.usage?.input_tokens==='number'&&typeof run.usage?.output_tokens==='number'?run.usage.input_tokens+run.usage.output_tokens:null)).filter(value=>typeof value==='number');
-      el('usage-detail').textContent=`${data.requests} demandes aujourd’hui. ${tokens.length?tokens.reduce((sum,value)=>sum+value,0).toLocaleString('fr')+' tokens rapportés par le fournisseur.':'Le fournisseur n’a pas rapporté de total de tokens.'} Réinitialisation de la limite à 00:00 UTC.`;}catch(error){message(error.message,true);}}
+  async function loadUsage(){try{const data=await api('/api/usage');el('daily-limit').value=data.limit;const tokens=data.runs.map(run=>run.usage?.totalTokens ?? run.usage?.totalTokenCount ?? (typeof run.usage?.input_tokens==='number'&&typeof run.usage?.output_tokens==='number'?run.usage.input_tokens+run.usage.output_tokens:null)).filter(value=>typeof value==='number');
+      el('usage-detail').textContent=`${data.requests} requests today. ${tokens.length?tokens.reduce((sum,value)=>sum+value,0).toLocaleString('en')+t("workspace.tokens_reported_by_your_ai_service"):t("workspace.your_ai_service_hasn_t_reported_token_usage")} The daily limit resets at 00:00 UTC.`;}catch(error){message(error.message,true);}}
   async function loadSettings(){
-    try{const sources=await api('/api/sources');el('source-boards').value=sources.boards.join('\n');const state=await api('/api/providers');el('connected-provider-name').textContent=state.name||'Ton fournisseur';el('connected-provider-detail').textContent=state.email|| (state.provider==='chatgpt'?'Compte ChatGPT connecté':'Clé conservée dans le trousseau');await loadUsage();}catch(error){message(error.message,true);}
+    try{const sources=await api('/api/sources');el('source-boards').value=sources.boards.join('\n');const state=await api('/api/providers');el('connected-provider-name').textContent=state.name||t("workspace.your_ai_service");el('connected-provider-detail').textContent=state.email|| (state.provider==='chatgpt'?t("workspace.chatgpt_connected"):t("workspace.api_key_stored_in_your_system_keychain"));await loadUsage();}catch(error){message(error.message,true);}
   }
   function updateProfileDisplay(){
-    el('profile-name').textContent=profile.name||'Ton profil';el('profile-initial').textContent=(profile.name||'C').slice(0,1).toUpperCase();
-    el('provider-indicator').textContent=bootstrap.connection.name||'Mode local · IA facultative';
-    el('criteria-summary').textContent=[...(profile.roles||[]),...(profile.locations||[]),{remote:'Télétravail',hybrid:'Hybride',office:'Sur place',flexible:'Organisation flexible'}[profile.remote]].filter(Boolean).join(' · ');
+    el('profile-name').textContent=profile.name||t("workspace.your_profile");el('profile-initial').textContent=(profile.name||'C').slice(0,1).toUpperCase();
+    el('criteria-summary').textContent=[...(profile.roles||[]),...(profile.locations||[]),{remote:t("workspace.remote"),hybrid:t("workspace.hybrid"),office:t("workspace.on_site"),flexible:t("workspace.flexible_work_arrangement")}[profile.remote]].filter(Boolean).join(' · ');
   }
   async function start(){
     started=true;updateProfileDisplay();
@@ -188,14 +187,14 @@
     drop.ondragover=event=>{event.preventDefault();drop.classList.add('drag-over');};
     drop.ondragleave=()=>drop.classList.remove('drag-over');
     drop.ondrop=event=>{event.preventDefault();drop.classList.remove('drag-over');if(!el('cv-upload').disabled)importCV(event.dataTransfer.files[0]);};
-    el('cancel-search').onclick=async()=>{try{await api('/api/discovery/cancel',{method:'POST',body:'{}'});el('search-progress-text').textContent='Arrêt demandé. La lecture de la source en cours va se terminer…';}catch(error){message(error.message,true);}};
+    el('cancel-search').onclick=async()=>{try{await api('/api/discovery/cancel',{method:'POST',body:'{}'});el('search-progress-text').textContent=t("workspace.stopping_after_the_current_source_finishes");}catch(error){message(error.message,true);}};
     el('profile-form').oninput=()=>{window.profileDirty=true;queueDraft();};el('profile-form').onsubmit=saveProfile;
     el('profile-next').onclick=()=>{const visible=document.querySelector(`[data-profile-step="${step}"]`);if([...visible.querySelectorAll('input,textarea,select')].every(field=>field.reportValidity()))profileStep(step+1);};
     el('profile-previous').onclick=()=>profileStep(step-1);el('profile-cancel').onclick=()=>{window.profileDirty=false;fillProfile(profile);activate();};
     document.querySelectorAll('[data-screen]').forEach(button=>button.onclick=()=>go(button.dataset.screen));el('profile-open').onclick=editProfile;el('settings-profile').onclick=editProfile;
-    el('provider-change').onclick=()=>showConnection(true);el('provider-disconnect').onclick=async()=>{try{await api('/api/providers/disconnect',{method:'POST',body:'{}'});bootstrap.connection={connected:false,name:'Mode local · IA facultative'};updateProfileDisplay();activate();}catch(error){message(error.message,true);}};
-    el('save-source-boards').onclick=async()=>{try{const boards=el('source-boards').value.split('\n').map(value=>value.trim()).filter(Boolean);await api('/api/sources',{method:'PUT',body:JSON.stringify({boards})});message('Sources enregistrées. La prochaine recherche les consultera.');}catch(error){message(error.message,true);}};
-    el('save-daily-limit').onclick=async()=>{try{await api('/api/usage',{method:'PUT',body:JSON.stringify({limit:Number(el('daily-limit').value)})});await loadUsage();message('Limite quotidienne enregistrée.');}catch(error){message(error.message,true);}};
+    el('provider-change').onclick=()=>showConnection(true);el('provider-disconnect').onclick=async()=>{try{await api('/api/providers/disconnect',{method:'POST',body:'{}'});bootstrap.connection={connected:false,name:t("workspace.ai_not_connected")};updateProfileDisplay();activate();}catch(error){message(error.message,true);}};
+    el('save-source-boards').onclick=async()=>{try{const boards=el('source-boards').value.split('\n').map(value=>value.trim()).filter(Boolean);await api('/api/sources',{method:'PUT',body:JSON.stringify({boards})});message(t("workspace.sources_saved_they_ll_be_included_in_your"));}catch(error){message(error.message,true);}};
+    el('save-daily-limit').onclick=async()=>{try{await api('/api/usage',{method:'PUT',body:JSON.stringify({limit:Number(el('daily-limit').value)})});await loadUsage();message(t("workspace.daily_limit_saved"));}catch(error){message(error.message,true);}};
     el('chat-form').onsubmit=sendChat;['first-search','search-offers','refresh-offers'].forEach(id=>el(id).onclick=search);
     el('recommendations-list').onclick=event=>{const button=event.target.closest('[data-interest]');if(button)interest(button);};
     document.addEventListener('click',event=>{const button=event.target.closest('[data-retry-preparation]');if(button){button.dataset.id=button.dataset.retryPreparation;button.dataset.interest='accept';interest(button);}});

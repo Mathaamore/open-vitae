@@ -1,4 +1,6 @@
 """Read-only public employer boards; no application POSTs or site scraping."""
+
+from .i18n import tr
 from datetime import datetime
 import re
 
@@ -12,11 +14,11 @@ ENDPOINTS = {
 
 def boards(value):
     if not isinstance(value, list) or len(value) > 6:
-        raise ValueError('Ajoute au maximum six tableaux employeurs.')
+        raise ValueError(tr('ats.ajoute_au_maximum_six_tableaux_employeurs'))
     result = []
     for item in value:
         if not isinstance(item, str) or not re.fullmatch(r'(greenhouse|lever|lever-eu|ashby):[A-Za-z0-9_-]{1,80}', item):
-            raise ValueError('Utilise greenhouse:entreprise, lever:entreprise, lever-eu:entreprise ou ashby:entreprise.')
+            raise ValueError(tr('ats.utilise_greenhouse_entreprise_lever_entreprise_lever_eu_entreprise'))
         if item not in result:
             result.append(item)
     return result
@@ -41,7 +43,7 @@ def postings(board, data):
     kind, slug = board.split(':')
     rows = data if kind.startswith('lever') else data.get('jobs') if isinstance(data, dict) else None
     if not isinstance(rows, list):
-        raise ValueError('Format du tableau employeur invalide.')
+        raise ValueError(tr('ats.format_du_tableau_employeur_invalide'))
     result = []
     for raw in rows[:100]:
         if not isinstance(raw, dict):

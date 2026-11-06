@@ -8,8 +8,8 @@
     "job_updated_at": "example"
   },
   "data": {
-    "summary": "Résumé fidèle aux faits",
-    "motivation": "Texte de candidature à relire",
+    "summary": "A summary grounded in the candidate’s experience",
+    "motivation": "An application introduction to review",
     "selected_facts": []
   }
 }

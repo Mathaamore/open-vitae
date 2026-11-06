@@ -5,12 +5,12 @@
     "profile_revision": 1
   },
   "data": {
-    "summary": "Synthèse à relire",
+    "summary": "A profile summary to review",
     "strengths": [
-      "Un point documenté"
+      "A strength supported by the profile"
     ],
     "uncertainties": [
-      "Un point à confirmer"
+      "Something to clarify"
     ]
   }
 }

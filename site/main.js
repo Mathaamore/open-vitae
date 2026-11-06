@@ -7,14 +7,18 @@
     if (release.verified !== true || !/^\d+\.\d+\.\d+$/.test(release.version)) return;
     const url = new URL(release.url);
     if (url.protocol !== 'https:' || url.hostname !== 'github.com' || url.search || url.hash || url.username || url.password || url.port || url.pathname !== `/Mathaamore/open-vitae/releases/download/v${release.version}/Open-vitae-Mac.dmg`) return;
-    document.querySelectorAll('[data-download], #release-link').forEach(link => {link.href=url.href;link.textContent=`Télécharger pour macOS · ${release.version} ↗`;});
-    document.querySelector('#release-status').textContent=`Version ${release.version} vérifiée pour macOS 14+ sur Apple Silicon. Glisse l’app dans Applications, puis ouvre-la.`;
+    document.querySelectorAll('[data-download], #release-link').forEach(link => {link.href=url.href;link.textContent=t("release.download",{version:release.version});});
+    document.querySelector('.compatibility').textContent=t('release.compatibility');
+    document.querySelector('#availability-answer').textContent=t('release.faq',{version:release.version});
+    document.querySelector('#release-status').textContent=t("release.available",{version:release.version});
   } catch { /* The development availability message remains usable offline. */ }
 })();
 if (!matchMedia('(prefers-reduced-motion: reduce)').matches && 'IntersectionObserver' in window) {
   const tagline = document.querySelector('.tagline');
   const words = [];
-  for (const child of [...tagline.childNodes]) {
+  const walker=document.createTreeWalker(tagline,NodeFilter.SHOW_TEXT);
+  const textNodes=[];while(walker.nextNode())textNodes.push(walker.currentNode);
+  for (const child of textNodes) {
     if (child.nodeType !== Node.TEXT_NODE) continue;
     const fragment = document.createDocumentFragment();
     child.textContent.split(/(\s+)/).forEach(word => {

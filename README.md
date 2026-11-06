@@ -4,7 +4,7 @@
 
 A local, open-source workspace for finding roles, preparing honest applications and keeping track of what you sent.
 
-**Early preview · MIT · macOS desktop app · French interface**
+**Early preview · MIT · macOS desktop app · English interface**
 
 Introduce yourself, import your CV and explore job suggestions. Keep the offers that interest you; Open Vitæ prepares a company/product/team brief, a CV draft and answers to review and copy to the employer's website. You submit the application yourself and record the outcome.
 
@@ -68,7 +68,7 @@ No notarized public installer is published yet. Local builds are ad-hoc signed. 
 
 ## Public website
 
-The French static landing page lives in [`site/`](site/README.md). Deploy to Vercel with **Root Directory `site`**, framework **Other**, no build command and output **`.`**. It never connects to the local service. The download CTA remains unavailable until a maintainer records a verified release.
+The English static landing page lives in [`site/`](site/README.md). Deploy to Vercel with **Root Directory `site`**, framework **Other**, no build command and output **`.`**. It never connects to the local service. The download CTA remains unavailable until a maintainer records a verified release.
 
 ## Privacy
 

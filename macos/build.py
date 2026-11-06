@@ -59,6 +59,7 @@ if not any(browser_cache.glob('chromium_headless_shell-*')):
     raise SystemExit('Download the Playwright headless browser first; see macos/README.md.')
 run(sys.executable, '-m', 'PyInstaller', '--noconfirm', '--onedir', '--name', 'candidatures-service',
     '--paths', root/'src', '--add-data', str(root/'src/job_agent/web')+':job_agent/web',
+    '--add-data',str(root/'src/job_agent/locales')+':job_agent/locales',
     '--collect-all','playwright','--copy-metadata','open-vitae','--copy-metadata','keyring','--hidden-import','keyring.backends.macOS',
     '--hidden-import', 'uvicorn.loops.asyncio', '--hidden-import', 'uvicorn.protocols.http.h11_impl',
     '--hidden-import', 'uvicorn.lifespan.on', '--exclude-module', 'pytest', '--exclude-module', 'numpy',
@@ -71,6 +72,7 @@ contents = app/'Contents'
 resources = contents/'Resources'
 (contents/'MacOS').mkdir(parents=True)
 resources.mkdir()
+shutil.copytree(root/'macos/en.lproj',resources/'en.lproj')
 if args.release:
     (contents/'Frameworks').mkdir()
     shutil.copytree(sparkle/'Sparkle.framework', contents/'Frameworks/Sparkle.framework', symlinks=True)
@@ -102,10 +104,10 @@ run('iconutil', '-c', 'icns', iconset, '-o', resources/'AppIcon.icns')
 with (contents/'Info.plist').open('wb') as f:
     plistlib.dump({'CFBundleName': 'Open Vitæ', 'CFBundleDisplayName': 'Open Vitæ',
         'CFBundleIdentifier': release['bundle_id'], 'CFBundleExecutable': 'Candidatures',
-        'CFBundlePackageType': 'APPL', 'CFBundleShortVersionString': version, 'CFBundleVersion': str(release['build']),
+        'CFBundlePackageType': 'APPL', 'CFBundleDevelopmentRegion': 'en', 'CFBundleLocalizations': ['en'], 'CFBundleShortVersionString': version, 'CFBundleVersion': str(release['build']),
         'CFBundleIconFile': 'AppIcon', 'LSMinimumSystemVersion': release['minimum_macos'], 'NSHighResolutionCapable': True,
         'NSAppTransportSecurity': {'NSAllowsLocalNetworking': True},
-        'NSHumanReadableCopyright': 'Open Vitæ — application locale open source',
+        'NSHumanReadableCopyright': 'Open Vitæ',
         **({'SUFeedURL': feed, 'SUPublicEDKey': public_key, 'SUAutomaticallyUpdate': False, 'SUVerifyUpdateBeforeExtraction': True, 'SURequireSignedFeed': True} if args.release else {})}, f)
 if args.release:
     # Sign nested code from the inside out; --deep is verification, not a signing plan.

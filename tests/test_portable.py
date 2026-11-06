@@ -67,7 +67,7 @@ class PortableTest(unittest.TestCase):
             result=opportunities.retrieve('https://example.com/job')
         self.assertEqual(result['company'],'Example');self.assertIn('58000',result['salary']);self.assertEqual(result['description'],'Python APIs')
         with patch.object(opportunities,'request',return_value=(b'<h1>Blocked</h1>','https://example.com/job')):
-            with self.assertRaisesRegex(ValueError,'Colle'):opportunities.retrieve('https://example.com/job')
+            with self.assertRaisesRegex(ValueError,'Paste'):opportunities.retrieve('https://example.com/job')
         self.assertEqual(self.store.all(),[])
 
     def test_text_only_jobs_have_distinct_manual_submission_targets(self):
@@ -107,7 +107,7 @@ class PortableTest(unittest.TestCase):
         for change in [{'schema_version':2},{'schema_version':True},{'type':'execute'},{'context':{'profile_revision':True}},{'data':{'jobs':[{'company':'X','role':'Y','url':'https://127.0.0.1'}]}},{'data':{'jobs':[{'company':'X','role':'Y','url':'https://example.com','status':'SUBMITTED'}]}}]:
             with self.assertRaises(ValueError):portable.preview(self.ws,{**data,**change})
         self.ws.save_profile(PROFILE)
-        with self.assertRaisesRegex(ValueError,'changé'):portable.apply(self.ws,data)
+        with self.assertRaisesRegex(ValueError,'has changed'):portable.apply(self.ws,data)
         self.assertEqual(self.store.all(),[])
         for raw in [b'{"x":1,"x":2}',b'{"x":NaN}',b'```json\n{}\n```',b'x'*1000001]:
             with self.assertRaises(ValueError):portable.parse(raw)
