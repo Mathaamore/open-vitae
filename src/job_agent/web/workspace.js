@@ -51,7 +51,7 @@
     if (!bootstrap?.onboarded && !el('profile-step').hidden) queueDraft();
   }
   function editProfile() {
-    if (typeof dirty !== 'undefined' && dirty) { message(t("workspace.save_or_discard_your_application_changes_before_editing"), true); return; }
+    if (typeof dirty !== 'undefined' && (dirty || trackingDirty)) { message(t("workspace.save_or_discard_your_application_changes_before_editing"), true); return; }
     el('workspace-root').hidden = true; el('welcome').hidden = false; el('connection-step').hidden = true; el('profile-step').hidden = false; el('welcome').scrollTop=0;
     el('profile-cancel').hidden = !bootstrap?.onboarded; fillProfile(bootstrap?.onboarded ? profile : bootstrap?.onboarding?.fields || profile); profileStep(bootstrap?.onboarded ? 0 : bootstrap?.onboarding?.step || 0); gateMessage(''); el('main').scrollTop=0;
   }
@@ -144,7 +144,7 @@
     finally { el('profile-save').disabled = false; }
   }
   function go(screen) {
-    if (typeof dirty !== 'undefined' && dirty) { message(t("workspace.save_or_discard_your_changes_before_leaving_this"), true); return false; }
+    if (typeof dirty !== 'undefined' && (dirty || trackingDirty)) { message(t("workspace.save_or_discard_your_changes_before_leaving_this"), true); return false; }
     if (current) home();
     ['explore','dashboard','settings-screen','tools-screen'].forEach(id => el(id).hidden = id !== screen);
     el('review').hidden = true;
@@ -208,7 +208,7 @@
     catch(error){message(error.message,true);button.disabled=false;}
   }
   async function prepareApplication(button) {
-    if (dirty) { message(t('workspace.save_or_discard_your_changes_before_leaving_this'), true); return; }
+    if (dirty || trackingDirty) { message(t('workspace.save_or_discard_your_changes_before_leaving_this'), true); return; }
     button.disabled = true;
     try {
       const state = await api('/api/providers'); updateConnection(state);
@@ -229,7 +229,7 @@
       if(document.hidden)return;
       try {
         await refreshJobs();
-        if(current && !dirty) {
+        if(current && !dirty && !trackingDirty) {
           const updated=jobs.find(job=>job.id===current.id);
           if(updated && (updated.preparation?.updated_at!==current.preparation?.updated_at || updated.revision!==current.revision)) {
             const wasPreparing=['queued','preparing'].includes(current.preparation?.state);

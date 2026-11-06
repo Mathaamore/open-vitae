@@ -115,7 +115,7 @@ final class CandidaturesApp: NSObject, NSApplicationDelegate, NSWindowDelegate, 
 
     func guardEdits(_ action: @escaping () -> Void, cancel: @escaping () -> Void = {}) {
         if web.isHidden || base == nil { action(); return }
-        web.evaluateJavaScript("(typeof dirty !== 'undefined' && dirty) || window.profileDirty === true") { value, _ in
+        web.evaluateJavaScript("(typeof dirty !== 'undefined' && dirty) || (typeof trackingDirty !== 'undefined' && trackingDirty) || window.profileDirty === true") { value, _ in
             if value as? Bool == true {
                 let alert = NSAlert(); alert.messageText = L("You have unsaved changes.")
                 alert.informativeText = L("Go back to save your changes, or continue without saving them.")

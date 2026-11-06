@@ -316,7 +316,7 @@ async def local_draft(job_id: str, request: Request):
 
 @app.get('/api/export')
 def export_workspace():
-    return {'schema_version':1,'profile':workspace.profile(),'jobs':store.all(),'feedback':workspace.feedback(),
+    return {'schema_version':1,'profile':workspace.profile(),'jobs':[{**value,'history':store.history(value['id'])} for value in store.all()],'feedback':workspace.feedback(),
             'profile_analysis':workspace.setting('portable_profile_analysis')}
 
 
@@ -464,6 +464,12 @@ async def interest(job_id: str, request: Request, background: BackgroundTasks):
         elif workspace.queue(job_id):
             background.add_task(preparation_worker.submit, run_preparation, job_id)
     return {'decision': data['decision'], 'preparation': workspace.preparation(job_id)}
+
+
+@app.post('/api/jobs/{job_id}/tracking')
+async def update_tracking(job_id: str, request: Request):
+    store.update_tracking(job_id,await payload(request))
+    return job(job_id)
 
 
 @app.post('/api/jobs/{job_id}/checks')

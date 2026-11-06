@@ -9,7 +9,7 @@ import re
 import sqlite3
 import shutil
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -18,6 +18,7 @@ from .migrations import prepare_database, SCHEMA_VERSION
 ROOT = Path(os.environ.get('JOB_AGENT_ROOT', Path(__file__).resolve().parents[2])).resolve()
 WEIGHTS = {'technical': 25, 'ownership': 25, 'growth': 20, 'remote': 15, 'compensation': 10, 'culture': 5}
 LOCKED = {'SUBMITTING', 'SUBMITTED', 'SUBMISSION_UNCERTAIN'}
+RECRUITMENT_STAGES = {'APPLIED','IN_REVIEW','INTERVIEW','OFFER','REJECTED','WITHDRAWN'}
 
 
 def now():
@@ -90,6 +91,9 @@ class Store:
                 id INTEGER PRIMARY KEY, job_id TEXT, action TEXT NOT NULL,
                 details TEXT NOT NULL, created_at TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS application_tracking (
+                job_id TEXT PRIMARY KEY, stage TEXT, updated_at TEXT NOT NULL
+            );
             CREATE TABLE IF NOT EXISTS attempts (
                 job_id TEXT PRIMARY KEY, dossier_hash TEXT NOT NULL,
                 state TEXT NOT NULL, receipt TEXT, created_at TEXT NOT NULL
@@ -121,9 +125,11 @@ class Store:
     def get(self, job_id):
         with self.db() as db:
             row = db.execute('SELECT * FROM jobs WHERE id=?', (str(job_id),)).fetchone()
+            tracking = db.execute('SELECT stage,updated_at FROM application_tracking WHERE job_id=?',(str(job_id),)).fetchone()
         if row is None:
             raise ValueError(tr('store.unknown_opportunity'))
         job = dict(row)
+        job['tracking'] = dict(tracking) if tracking else None
         for key in ('original', 'audit', 'dossier'):
             job[key] = json.loads(job[key]) if job[key] else None
         job['score'], job['coverage'] = score(job['audit'])
@@ -303,6 +309,31 @@ class Store:
             db.execute('UPDATE attempts SET state=?,receipt=? WHERE job_id=?', (state, canonical(receipt), job_id))
             db.execute('UPDATE jobs SET status=?,updated_at=? WHERE id=?', (state, now(), job_id))
             self.event(db, job_id, state, receipt or {'reason': 'No verified confirmation; automatic retries prohibited'})
+
+    def update_tracking(self, job_id, value):
+        if not isinstance(value,dict) or set(value) != {'stage','note','occurred_on','expected_updated_at'}:
+            raise ValueError(tr('tracking.invalid'))
+        stage,note,occurred,expected=(value[key] for key in ('stage','note','occurred_on','expected_updated_at'))
+        if stage is not None and (not isinstance(stage,str) or stage not in RECRUITMENT_STAGES):
+            raise ValueError(tr('tracking.invalid'))
+        if not isinstance(note,str) or len(note)>2000 or not isinstance(occurred,str) or expected is not None and not isinstance(expected,str):
+            raise ValueError(tr('tracking.invalid'))
+        try:
+            if date.fromisoformat(occurred).isoformat()!=occurred:raise ValueError()
+        except ValueError:
+            raise ValueError(tr('tracking.date')) from None
+        with self.db() as db:
+            db.execute('BEGIN IMMEDIATE')
+            if not db.execute('SELECT 1 FROM jobs WHERE id=?',(job_id,)).fetchone():
+                raise ValueError(tr('store.unknown_opportunity'))
+            row=db.execute('SELECT stage,updated_at FROM application_tracking WHERE job_id=?',(job_id,)).fetchone()
+            if expected != (row['updated_at'] if row else None):
+                raise ValueError(tr('tracking.changed'))
+            stage=stage if stage is not None else row['stage'] if row else None
+            if not note.strip() and (stage is None or row and stage==row['stage']):
+                raise ValueError(tr('tracking.empty'))
+            db.execute('INSERT INTO application_tracking VALUES (?,?,?) ON CONFLICT(job_id) DO UPDATE SET stage=excluded.stage,updated_at=excluded.updated_at', (job_id,stage,now()))
+            self.event(db,job_id,'TRACKING_UPDATED',{'stage':stage,'note':note.strip(),'occurred_on':occurred})
 
     def history(self, job_id):
         with self.db() as db:

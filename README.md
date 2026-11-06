@@ -26,6 +26,7 @@ The app works without internet, accounts or AI keys for profiles, CVs, saved job
 - Queue preparation after accepting an offer. Keep documented CV facts intact and review generated summaries and answers.
 - Leave unknown eligibility, missing form questions and consent choices for the candidate to check.
 - Save versions, review dossiers and record a submission without requiring a receipt.
+- Track replies, interviews, offers, rejections and withdrawals with dated notes. Filter active and closed applications without changing your documents.
 
 ## AI providers
 

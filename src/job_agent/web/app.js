@@ -1,6 +1,8 @@
-let token, jobs = [], current, dirty = false, busy = false, selectedView = 'all', currentTab = 'dossier', layout = 'list';
+let token, jobs = [], current, dirty = false, trackingDirty = false, busy = false, selectedView = 'all', currentTab = 'dossier', layout = 'list';
 const $ = selector => document.querySelector(selector);
 const labels = {DISCOVERED:t("app.saved"), VERIFIED:t("app.details_checked"), CV_READY:t("app.cv_ready"), APPLICATION_READY:t("app.ready_to_review"), REVIEWED:t("app.ready_to_apply"), APPROVED:t("app.ready_to_apply"), SUBMITTING:t("app.submission_in_progress"), SUBMITTED:t("app.applied"), SUBMISSION_UNCERTAIN:t("app.check_submission"), NEEDS_INPUT:t("app.needs_your_input"), MANUAL_ACTION_REQUIRED:t("app.needs_your_input"), FAILED:t("app.needs_attention"), SKIPPED:t("app.dismissed"), CLOSED:t("app.closed"), PRIORITY:t("app.strong_match"), STRETCH:t("app.stretch_role"), NEEDS_VERIFICATION:t("app.needs_verification"), INELIGIBLE:t("app.not_eligible")};
+const recruitmentStages=['APPLIED','IN_REVIEW','INTERVIEW','OFFER','REJECTED','WITHDRAWN'];
+for(const value of recruitmentStages)labels[value]=t('tracking.'+value);
 const lockedStatuses = ['SUBMITTING', 'SUBMITTED', 'SUBMISSION_UNCERTAIN'];
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'}[c]));
 const date = value => value ? new Date(value).toLocaleString('en-GB', {dateStyle:'short', timeStyle:'short'}) : t("app.not_provided");
@@ -8,23 +10,27 @@ const salary = job => typeof job.audit.salary === 'string' ? job.audit.salary : 
 const locationText = job => typeof job.audit.location === 'string' ? job.audit.location : job.audit.location?.name || t("app.location_not_provided");
 const mark = company => `<span class="company-mark" data-company="${esc(company)}" aria-hidden="true">${esc(company.replace(/[^\p{L}\p{N}]/gu, '').slice(0, company.includes(' ') ? 2 : 1))}</span>`;
 function status(value) {
-  const tone = ['NEEDS_INPUT','NEEDS_VERIFICATION','STRETCH','APPROVED','SUBMISSION_UNCERTAIN'].includes(value) ? 'warn' : ['SUBMITTED','REVIEWED','APPLICATION_READY','PRIORITY'].includes(value) ? 'good' : ['CLOSED','INELIGIBLE','FAILED'].includes(value) ? 'bad' : '';
+  const tone = ['NEEDS_INPUT','NEEDS_VERIFICATION','STRETCH','APPROVED','SUBMISSION_UNCERTAIN'].includes(value) ? 'warn' : ['SUBMITTED','REVIEWED','APPLICATION_READY','PRIORITY','INTERVIEW','OFFER'].includes(value) ? 'good' : ['CLOSED','INELIGIBLE','FAILED','REJECTED'].includes(value) ? 'bad' : '';
   return `<span class="status ${tone}">${esc(labels[value] || value)}</span>`;
 }
 function displayStatus(job) {
+  if(['SUBMITTING','SUBMISSION_UNCERTAIN'].includes(job.status))return job.status;
+  if(job.tracking?.stage)return job.tracking.stage;
   return job.status === 'SUBMITTED' ? 'SUBMITTED' : ['CLOSED','INELIGIBLE'].includes(job.category) ? job.category : job.status;
 }
 function matchesFilter(job, filter) {
   if (filter === 'all') return true;
-  if (filter === 'tracked') return job.revision > 0 || ['accept','later'].includes(job.interest) || job.status === 'SUBMITTED';
+  if (filter === 'tracked') return Boolean(job.tracking) || job.revision > 0 || ['accept','later'].includes(job.interest) || job.status === 'SUBMITTED';
   if (filter === 'saved') return job.interest === 'later';
   if (filter === 'dossiers') return job.interest === 'accept' && !job.revision || job.revision > 0 && job.status === 'NEEDS_INPUT';
   if (filter === 'ready') return job.status === 'APPLICATION_READY';
-  if (filter === 'sent') return job.status === 'SUBMITTED';
+  if (filter === 'closed') return ['REJECTED','WITHDRAWN'].includes(job.tracking?.stage);
+  if (filter === 'sent') return !matchesFilter(job,'closed') && (job.status === 'SUBMITTED' || ['APPLIED','IN_REVIEW','INTERVIEW','OFFER'].includes(job.tracking?.stage));
+  if (recruitmentStages.includes(filter))return job.tracking?.stage===filter || filter==='APPLIED' && job.status==='SUBMITTED' && !job.tracking?.stage;
   return job.status === filter || job.category === filter;
 }
 function stageFor(job) {
-  if (job.status === 'SUBMITTED') return 3;
+  if (job.status === 'SUBMITTED' || job.tracking?.stage) return 3;
   if (['REVIEWED','APPROVED','MANUAL_ACTION_REQUIRED','SUBMITTING','SUBMISSION_UNCERTAIN'].includes(job.status)) return 2;
   return 1;
 }
@@ -68,7 +74,7 @@ function table() {
     <td><span class="dossier-reference">${job.revision > 0 ? 'DOSSIER' : t("app.job")} <span> / ${esc(job.id)}</span></span><div class="employer">${mark(job.company)}<div><strong>${esc(job.company)}</strong><span class="role-name">${esc(job.audit.title || job.role)}</span></div></div></td>
     <td class="condition"><strong>${esc(salary(job))}</strong><small>${esc(locationText(job))}</small></td>
     <td class="assessment">${job.coverage ? `<div class="score"><span class="number">${esc(job.score)}</span><small>/ 100</small></div><span class="coverage">${esc(job.coverage)} ${esc(t("app.documented"))}</span>` : `<span class="coverage">${esc(t("app.not_assessed"))}</span>`}</td>
-    <td class="progress-cell">${job.preparation && ['queued','preparing','failed'].includes(job.preparation.state) ? `<span class="status ${job.preparation.state === 'failed' ? 'warn' : ''}">${esc(job.preparation.state === 'failed' ? t("app.needs_attention") : job.preparation.state === 'queued' ? t("app.queued") : t("app.preparing"))}</span><small class="preparation-note">${esc(job.preparation.message)}</small>${job.preparation.state === 'failed' ? `<button class="text-button" data-retry-preparation="${esc(job.id)}">${esc(t("app.try_again"))}</button>` : ''}` : status(displayStatus(job))}<span class="category-label">${esc(displayStatus(job) === job.category ? t("app.not_shortlisted") : labels[job.category] || job.category)}</span></td>
+    <td class="progress-cell">${job.preparation && ['queued','preparing','failed'].includes(job.preparation.state) ? `<span class="status ${job.preparation.state === 'failed' ? 'warn' : ''}">${esc(job.preparation.state === 'failed' ? t("app.needs_attention") : job.preparation.state === 'queued' ? t("app.queued") : t("app.preparing"))}</span><small class="preparation-note">${esc(job.preparation.message)}</small>${job.preparation.state === 'failed' ? `<button class="text-button" data-retry-preparation="${esc(job.id)}">${esc(t("app.try_again"))}</button>` : ''}` : status(displayStatus(job))}${job.tracking ? `<small class="tracking-updated">${esc(date(job.tracking.updated_at))}</small>` : ''}<span class="category-label">${esc(displayStatus(job) === job.category ? t("app.not_shortlisted") : labels[job.category] || job.category)}</span></td>
     <td class="action-cell"><a class="button-link open-row" href="?job=${encodeURIComponent(job.id)}" data-open="${esc(job.id)}" aria-label="View job ${esc(job.company)}">${job.revision > 0 ? t("app.open_application") : t("app.view_job")} <span class="open-arrow" aria-hidden="true">↗</span></a></td>
   </tr>`).join('') : `<tr><td colspan="5"><div class="empty-state"><strong>${esc(t("app.no_jobs_in_this_view"))}</strong><p>${esc(t("app.try_a_different_search_or_clear_your_filters"))}</p><button id="reset-filters">${esc(t("app.clear_filters"))}</button></div></td></tr>`;
   document.querySelectorAll('[data-open]').forEach(link => link.onclick = event => { if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return; event.preventDefault(); open(link.dataset.open); });
@@ -76,7 +82,7 @@ function table() {
   if ($('#reset-filters')) $('#reset-filters').onclick = () => { selectedView = 'all'; $('#filter').value = 'all'; $('#search').value = ''; updateViews(); table(); };
 }
 function updateViews() {
-  const headings = {all:[t("app.applications"),t("app.saved_jobs_and_applications_in_progress")],dossiers:[t("app.drafting"),t("app.applications_you_re_working_on")],ready:[t("app.ready_to_review"),t("app.check_your_cv_and_answers_before_marking_the")],sent:[t("app.applied"),t("app.applications_you_ve_recorded_as_sent")]};
+  const headings = {all:[t("app.applications"),t("app.saved_jobs_and_applications_in_progress")],dossiers:[t("app.drafting"),t("app.applications_you_re_working_on")],ready:[t("app.ready_to_review"),t("app.check_your_cv_and_answers_before_marking_the")],sent:[t('tracking.in_progress'),t('tracking.in_progress_detail')],closed:[t('tracking.closed'),t('tracking.closed_detail')]};
   const [title, description] = headings[selectedView] || [t("app.saved"), t("app.jobs_you_want_to_come_back_to")];
   $('#dashboard-title').innerHTML = title;
   $('#view-description').textContent = description;
@@ -100,7 +106,7 @@ function setLayout(value) {
   syncUrl();
 }
 function home() {
-  if (dirty) { message(t("app.save_or_discard_your_changes_before_leaving_this"), true); return; }
+  if (dirty || trackingDirty) { message(t("app.save_or_discard_your_changes_before_leaving_this"), true); return; }
   if ($('#explore')) $('#explore').hidden = true; if ($('#settings-screen')) $('#settings-screen').hidden = true; if ($('#tools-screen')) $('#tools-screen').hidden = true;
   document.querySelectorAll('[data-screen]').forEach(button=>button.toggleAttribute('aria-current',false));
   document.querySelector('[data-screen=dashboard]').setAttribute('aria-current','page'); $('#screen-title').textContent=t('app.applications');
@@ -108,7 +114,7 @@ function home() {
   syncUrl(); $('#main').scrollTop=0; $('#dashboard-title').focus();
 }
 async function open(id) {
-  if (dirty) { message(t("app.save_or_discard_your_changes_before_opening_another"), true); return; }
+  if (dirty || trackingDirty) { message(t("app.save_or_discard_your_changes_before_opening_another"), true); return; }
   try {
     message(''); current = await api('/api/jobs/' + encodeURIComponent(id)); dirty = false;
     currentTab = current.dossier ? 'dossier' : 'offre';
@@ -174,11 +180,14 @@ function tracking(job) {
   const sent = job.status === 'SUBMITTED', preparing = ['queued','preparing'].includes(job.preparation?.state), canRecord = !preparing && ['REVIEWED','APPROVED','MANUAL_ACTION_REQUIRED','SUBMISSION_UNCERTAIN'].includes(job.status);
   const events = job.history.events, receipts = events.filter(event => ['MANUAL_CONFIRMATION','SUBMITTED'].includes(event.action));
   const names = {DOSSIER_SAVED:t("app.materials_saved"), REVIEW:t("app.marked_ready_to_apply"), MANUAL_CONFIRMATION:t("app.marked_as_applied"), SUBMITTED:t("app.application_recorded"), AUDIT:t("app.details_checked"), SKIP:t("app.application_dismissed"), LATER:t("app.application_set_aside"), GO:t("app.review_recorded"), SUBMITTING:t("app.submission_attempt_recorded"), SUBMISSION_UNCERTAIN:t("app.submission_needs_checking")};
-  return `<div class="tracking-layout"><section><h2>${esc(t("app.application_progress"))}</h2><div class="tracking-note"><div class="notice ${sent ? 'good' : ''}"><strong>${esc(sent ? t("app.applied") : canRecord ? t("app.ready_to_apply") : t("app.drafting"))}</strong><p>${sent ? t("app.you_ve_recorded_this_application_as_sent") : canRecord ? t("app.after_sending_the_application_yourself_choose_mark_as") : t("app.review_your_materials_and_complete_any_missing_answers")}</p></div>
+  const recruitment=job.tracking?.stage || (sent?'APPLIED':'');
+  const today=new Date(Date.now()-new Date().getTimezoneOffset()*60000).toISOString().slice(0,10);
+  const form=`<form id="tracking-form" class="tracking-form"><h3>${esc(t('tracking.update'))}</h3><p>${esc(t('tracking.help'))}</p><label class="stacked-label">${esc(t('tracking.stage'))}<select id="tracking-stage"><option value="">${esc(t('tracking.keep'))}</option>${recruitmentStages.map(value=>`<option value="${value}" ${value===recruitment?'selected':''}>${esc(labels[value])}</option>`).join('')}</select></label><label class="stacked-label">${esc(t('tracking.date'))}<input id="tracking-date" type="date" value="${today}" required></label><label class="stacked-label">${esc(t('tracking.note'))}<textarea id="tracking-note" rows="4" maxlength="2000" placeholder="${esc(t('tracking.placeholder'))}"></textarea></label><div class="tracking-form-actions"><button class="primary" id="save-tracking" disabled>${esc(t('tracking.save'))}</button><button id="discard-tracking" type="button" class="quiet" hidden>${esc(t('tracking.cancel'))}</button></div></form>`;
+  return `<div class="tracking-layout"><section><h2>${esc(t("app.application_progress"))}</h2><div class="tracking-note"><div class="notice ${sent ? 'good' : ''}"><strong>${esc(recruitment ? labels[recruitment] : canRecord ? t("app.ready_to_apply") : t("app.drafting"))}</strong><p>${recruitment ? t('tracking.recorded_by_you') : canRecord ? t("app.after_sending_the_application_yourself_choose_mark_as") : t("app.review_your_materials_and_complete_any_missing_answers")}</p></div>
     ${sent && receipts.length ? (() => { const event = receipts[0], receipt = eventDetails(event); return `<p><strong>${date(event.created_at)}</strong> · ${receipt.verified_by === 'user' ? t("app.recorded_by_you") : t("app.confirmation_recorded")}</p><p class="footnote">${esc(receipt.confirmation || '')}</p>`; })() : ''}
     ${canRecord ? `<label class="field"><span class="field-heading">${esc(t("app.note_or_receipt_optional"))}</span><textarea id="receipt" rows="3" placeholder="${esc(t("app.for_example_submitted_on_the_company_website_confirmation"))}"></textarea><small>${esc(t("app.you_can_leave_this_blank"))}</small></label>` : ''}
-    <p class="footnote">${esc(t("app.record_updates_here_yourself_recruiter_replies_and_interviews"))}</p></div></section>
-    <section><h2>${esc(t("app.activity"))}</h2><ol class="timeline">${events.map(event => { const details = eventDetails(event); return `<li><span class="timeline-dot" aria-hidden="true"></span><div><strong>${esc(names[event.action] || t("app.application_updated"))}</strong><time datetime="${esc(event.created_at)}">${date(event.created_at)}</time>${details.revision ? `<p>${esc(t("app.version"))} ${esc(details.revision)}</p>` : ''}${details.confirmation ? `<p>${esc(details.confirmation)}</p>` : ''}</div></li>`; }).join('') || `<li>${esc(t("app.no_activity_yet"))}</li>`}</ol>
+    ${form}</div></section>
+    <section><h2>${esc(t("app.activity"))}</h2><ol class="timeline">${events.map(event => { const details = eventDetails(event); return `<li><span class="timeline-dot" aria-hidden="true"></span><div><strong>${esc(event.action==='TRACKING_UPDATED' ? labels[details.stage] || t('tracking.note_added') : names[event.action] || t("app.application_updated"))}</strong><time datetime="${esc(details.occurred_on || event.created_at)}">${details.occurred_on ? esc(details.occurred_on) : date(event.created_at)}</time>${details.revision ? `<p>${esc(t("app.version"))} ${esc(details.revision)}</p>` : ''}${details.confirmation ? `<p>${esc(details.confirmation)}</p>` : ''}${details.note ? `<p>${esc(details.note)}</p>` : ''}</div></li>`; }).join('') || `<li>${esc(t("app.no_activity_yet"))}</li>`}</ol>
     <details class="history-versions"><summary>${esc(t("app.saved_versions"))}${job.history.versions.length})</summary><ul>${job.history.versions.map(version => `<li>${esc(t("app.version"))} ${esc(version.revision)} · ${date(version.created_at)}</li>`).join('')}</ul></details><details><summary>${esc(t("app.activity_details"))}</summary><pre>${esc(JSON.stringify(job.history, null, 2))}</pre></details></section></div>`;
 }
 function preparationActions(job, preparing) {
@@ -196,11 +205,15 @@ function preparationPanel(job) {
 }
 function render() {
   const job = current, data = job.dossier, stage = stageFor(job), preparing = ['queued','preparing'].includes(job.preparation?.state), canReview = !preparing && data && !job.problems.length && ['APPLICATION_READY','NEEDS_INPUT','SKIPPED','VERIFIED'].includes(job.status), canRecord = !preparing && ['REVIEWED','APPROVED','MANUAL_ACTION_REQUIRED','SUBMISSION_UNCERTAIN'].includes(job.status);
-  $('#review').innerHTML = `<a class="back" href="/" id="back">${esc(t("app.all_jobs"))}</a><div class="review-top"><div class="company-heading">${mark(job.company)}<div><h1 id="job-title" tabindex="-1">${esc(job.company)}</h1><p class="review-role">${esc(job.audit.title || job.role)}</p>${status(displayStatus(job))}</div></div><div class="review-actions"><button data-edit-opportunity="${esc(job.id)}" ${lockedStatuses.includes(job.status)?'disabled':''}>${esc(t("app.edit_job"))}</button>${preparationActions(job,preparing)}${job.url?`<a class="button-link" href="${esc(job.url)}" target="_blank" rel="noopener noreferrer">${esc(t("app.view_listing"))}</a>`:''}${canReview ? `<button class="primary" id="review-dossier">${esc(t("app.mark_ready_to_apply"))}</button>` : ''}${canRecord ? `<button class="primary" id="record-receipt">${esc(t("app.mark_as_applied"))}</button>` : ''}<span class="action-hint">${job.status === 'SUBMITTED' ? t("app.recorded_as_applied") : canRecord ? t("app.use_this_after_sending_the_application_yourself") : canReview ? t("app.this_records_your_review_you_still_send_the") : t("app.check_the_materials_for_missing_details")}</span></div></div>
+  $('#review').innerHTML = `<a class="back" href="/" id="back">${esc(t("app.all_jobs"))}</a><div class="review-top"><div class="company-heading">${mark(job.company)}<div><h1 id="job-title" tabindex="-1">${esc(job.company)}</h1><p class="review-role">${esc(job.audit.title || job.role)}</p>${status(displayStatus(job))}</div></div><div class="review-actions"><button id="tracking-open">${esc(t("tracking.update"))}</button><button data-edit-opportunity="${esc(job.id)}" ${lockedStatuses.includes(job.status)?'disabled':''}>${esc(t("app.edit_job"))}</button>${preparationActions(job,preparing)}${job.url?`<a class="button-link" href="${esc(job.url)}" target="_blank" rel="noopener noreferrer">${esc(t("app.view_listing"))}</a>`:''}${canReview ? `<button class="primary" id="review-dossier">${esc(t("app.mark_ready_to_apply"))}</button>` : ''}${canRecord ? `<button class="primary" id="record-receipt">${esc(t("app.mark_as_applied"))}</button>` : ''}<span class="action-hint">${job.status === 'SUBMITTED' ? t("app.recorded_as_applied") : canRecord ? t("app.use_this_after_sending_the_application_yourself") : canReview ? t("app.this_records_your_review_you_still_send_the") : t("app.check_the_materials_for_missing_details")}</span></div></div>
     <div class="review-secondary"><div class="review-stage" aria-label="Step ${stage} of 3">${[t("app.draft"),t("app.apply"),t("app.track")].map((text, index) => `<span class="${stage === index + 1 ? 'current-step' : ''}"><span class="step-index" aria-hidden="true">${index + 1}</span>${text}</span>`).join('')}</div><div class="secondary-actions"><button class="text-button" id="later" ${lockedStatuses.includes(job.status) ? 'disabled' : ''}>${esc(t("app.set_aside"))}</button><button class="text-button" id="skip" ${lockedStatuses.includes(job.status) ? 'disabled' : ''}>${esc(t("app.dismiss"))}</button></div></div>
-    <div class="review-tabs" role="tablist" aria-label="${esc(t("app.application_sections"))}"><button role="tab" id="tab-offre" aria-controls="panel-offre" data-tab="offre">${esc(t("app.job_2"))}</button><button role="tab" id="tab-dossier" aria-controls="panel-dossier" data-tab="dossier">${esc(t("app.materials"))}${data ? '' : ` <small>${esc(t("app.draft_2"))}</small>`}</button><button role="tab" id="tab-suivi" aria-controls="panel-suivi" data-tab="suivi">${esc(t("app.activity"))}</button></div>
+    <div class="review-tabs" role="tablist" aria-label="${esc(t("app.application_sections"))}"><button role="tab" id="tab-offre" aria-controls="panel-offre" data-tab="offre">${esc(t("app.job_2"))}</button><button role="tab" id="tab-dossier" aria-controls="panel-dossier" data-tab="dossier">${esc(t("app.materials"))}${data ? '' : ` <small>${esc(t("app.draft_2"))}</small>`}</button><button role="tab" id="tab-suivi" aria-controls="panel-suivi" data-tab="suivi">${esc(t('tracking.progress'))}</button></div>
     ${preparationPanel(job)}<section id="panel-offre" role="tabpanel" aria-labelledby="tab-offre">${job.audit.pending_retrieval?`<p class="notice">${esc(t("app.link_saved_choose_edit_job_to_get_its"))}</p>`:''}${job.audit.origin==='portable_ai'?`<p class="notice">${esc(t("app.imported_from_an_external_ai_confirm_that_the"))}</p>`:''}${offer(job)}${job.audit.external_analysis?`<section class="notice"><h2>${esc(t("app.imported_analysis_not_verified"))}</h2><pre class="portable-result">${esc(JSON.stringify(job.audit.external_analysis,null,2))}</pre></section>`:''}</section><section id="panel-dossier" role="tabpanel" aria-labelledby="tab-dossier">${data ? dossier(job, data) : preparing ? `<p class="footnote">${esc(t("prepare.waiting"))}</p>` : `<div class="empty-state"><strong>${esc(t("app.start_your_application_materials"))}</strong><p>${esc(t("app.prepare_a_draft_from_your_profile_then_check"))}</p><button id="see-offer">${esc(t("app.review_job_details"))}</button></div>`}</section><section id="panel-suivi" role="tabpanel" aria-labelledby="tab-suivi">${tracking(job)}</section>`;
   $('#back').onclick = event => { if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return; event.preventDefault(); home(); };
+  $('#tracking-open').onclick=()=>{selectTab('suivi');if(!dirty && !trackingDirty){$('#tracking-form').scrollIntoView({block:'start'});$('#tracking-stage').focus();}};
+  $('#tracking-form').oninput=()=>{trackingDirty=true;$('#save-tracking').disabled=false;$('#discard-tracking').hidden=false;updateEditingState();};
+  $('#tracking-form').onsubmit=saveTracking;
+  $('#discard-tracking').onclick=()=>{trackingDirty=false;render();};
   $('#later').onclick = () => decide('LATER'); $('#skip').onclick = () => decide('SKIP');
   if ($('#review-dossier')) $('#review-dossier').onclick = () => decide('REVIEW');
   if ($('#record-receipt')) $('#record-receipt').onclick = recordSent;
@@ -232,17 +245,26 @@ function render() {
   if (preparing) $('#review').querySelectorAll('input,textarea,select,[data-assist],#save,[data-edit-opportunity]').forEach(node=>node.disabled=true);
 }
 function selectTab(tab) {
+  if(tab!==currentTab && (dirty || trackingDirty)){message(t('tracking.unsaved'),true);return;}
   currentTab = tab;
   document.querySelectorAll('[data-tab]').forEach(button => { const active = button.dataset.tab === tab; button.setAttribute('aria-selected', String(active)); button.tabIndex = active ? 0 : -1; });
   ['offre','dossier','suivi'].forEach(name => $('#panel-' + name).hidden = name !== tab);
   syncUrl();
+}
+async function saveTracking(event) {
+  event.preventDefault();
+  const button=$('#save-tracking');button.disabled=true;
+  try {
+    current=await api('/api/jobs/'+encodeURIComponent(current.id)+'/tracking',{method:'POST',body:JSON.stringify({stage:$('#tracking-stage').value || null,note:$('#tracking-note').value,occurred_on:$('#tracking-date').value,expected_updated_at:current.tracking?.updated_at || null})});
+    trackingDirty=false;currentTab='suivi';render();await refreshJobs();message(t('tracking.saved'));
+  } catch(error){message(error.message,true);button.disabled=false;}
 }
 function updateEditingState() {
   if ($('#save')) { $('#save').disabled = !dirty || busy; $('#save').textContent = busy ? t("app.saving") : t("app.save_changes"); }
   if ($('#discard')) $('#discard').hidden = !dirty;
   if ($('.review-footer')) $('.review-footer').classList.toggle('is-dirty', dirty);
   if ($('#save-state')) $('#save-state').textContent = dirty ? t("app.unsaved_changes") : t("app.all_changes_saved");
-  ['review-dossier','record-receipt','later','skip'].forEach(id => { const button = $('#' + id); if (button) button.disabled = busy || dirty || (['later','skip'].includes(id) && lockedStatuses.includes(current.status)); });
+  ['review-dossier','record-receipt','later','skip'].forEach(id => { const button = $('#' + id); if (button) button.disabled = busy || dirty || trackingDirty || (['later','skip'].includes(id) && lockedStatuses.includes(current.status)); });
 }
 function updateCounter(element) {
   const counter = document.querySelector(`[data-counter="${element.id}"]`); if (!counter) return;
@@ -271,17 +293,17 @@ async function save() {
   await updateJob('', {revision:current.revision, answers:readAnswers(), motivation:$('#motivation').value}, t("app.changes_saved"));
 }
 async function decide(choice) {
-  if (dirty) { message(t("app.save_your_changes_before_marking_this_application_ready"), true); return; }
+  if (dirty || trackingDirty) { message(t("app.save_your_changes_before_marking_this_application_ready"), true); return; }
   await updateJob('/decision', {choice, fingerprint:current.fingerprint}, choice === 'REVIEW' ? t("app.application_ready_send_it_through_the_employer_s") : choice === 'LATER' ? t("app.application_set_aside_2") : t("app.application_dismissed_2"));
 }
 async function recordSent() {
-  if (dirty) { message(t("app.save_your_changes_before_updating_the_tracker"), true); return; }
+  if (dirty || trackingDirty) { message(t("app.save_your_changes_before_updating_the_tracker"), true); return; }
   await updateJob('/confirmation', {confirmation:$('#receipt')?.value || '', fingerprint:current.fingerprint, declared_sent:true}, t("app.application_marked_as_applied"));
   if (current.status === 'SUBMITTED') selectTab('suivi');
 }
 async function init() {
   const route = new URLSearchParams(location.search);
-  if (['all','saved','dossiers','ready','sent'].includes(route.get('view'))) selectedView = route.get('view');
+  if (['all','saved','dossiers','ready','sent','closed'].includes(route.get('view'))) selectedView = route.get('view');
   if (route.get('layout') === 'grid') layout = 'grid';
   $('#search').value = route.get('q') || '';
   if ([...$('#filter').options].some(option => option.value === route.get('filter'))) $('#filter').value = route.get('filter');
@@ -290,9 +312,9 @@ async function init() {
     token = (await api('/api/session')).token; if (window.WorkspaceUI) await window.WorkspaceUI.boot(); await refreshJobs(); setLayout(layout);
     document.querySelectorAll('button[data-layout]').forEach(button => button.onclick = () => setLayout(button.dataset.layout));
     $('#search').oninput = table; $('#filter').onchange = table; $('#sort').onchange = table;
-    document.querySelectorAll('[data-view]').forEach(button => button.onclick = () => { if (dirty) { home(); return; } if (current) home(); selectedView = button.dataset.view; $('#filter').value = 'all'; updateViews(); table(); });
+    document.querySelectorAll('[data-view]').forEach(button => button.onclick = () => { if (dirty || trackingDirty) { home(); return; } if (current) home(); selectedView = button.dataset.view; $('#filter').value = 'all'; updateViews(); table(); });
     $('#home-link').onclick = event => { if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return; event.preventDefault(); home(); };
-    window.addEventListener('beforeunload', event => { if (dirty || window.profileDirty) { event.preventDefault(); event.returnValue = ''; } });
+    window.addEventListener('beforeunload', event => { if (dirty || trackingDirty || window.profileDirty) { event.preventDefault(); event.returnValue = ''; } });
     if (window.WorkspaceUI) await window.WorkspaceUI.start();
     if (route.get('job')) { await open(route.get('job')); if (current && ['offre','dossier','suivi'].includes(route.get('tab'))) selectTab(route.get('tab')); }
   } catch (error) { message(t("app.couldn_t_load_your_workspace") + error.message, true); }

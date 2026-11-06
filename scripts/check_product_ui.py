@@ -87,7 +87,31 @@ with tempfile.TemporaryDirectory() as tmp:
             shutil.copyfile(workspace/job['dossier']['attachments'][0]['path'],out/'product-resume.pdf')
             page.locator('#review-dossier').click();expect(page.locator('#record-receipt')).to_be_visible();page.locator('#record-receipt').click();expect(page.locator('#panel-suivi')).to_be_visible()
             assert Store(workspace).get('offer-one')['status']=='SUBMITTED'
+            page.locator('#tracking-open').click()
+            page.locator('#tracking-stage').select_option('INTERVIEW')
+            page.locator('#tracking-date').fill('2026-11-10')
+            page.locator('#tracking-note').fill('First interview with the fictional product team.')
+            page.locator('[data-screen="dashboard"]').click()
+            expect(page.locator('#review')).to_be_visible()
+            page.locator('#save-tracking').click()
+            expect(page.locator('.timeline')).to_contain_text('First interview with the fictional product team.')
+            expect(page.locator('#tracking-stage')).to_have_value('INTERVIEW')
+            page.reload()
+            expect(page.locator('#tracking-stage')).to_have_value('INTERVIEW')
+            expect(page.locator('[data-screen="dashboard"]')).to_have_attribute('aria-current','page')
+            expect(page.locator('.timeline')).to_contain_text('2026-11-10')
+            page.screenshot(path=str(out/'product-tracking.png'))
+            page.locator('#tracking-stage').select_option('REJECTED')
+            page.locator('#tracking-note').fill('Position filled internally; fictional employer feedback.')
+            page.locator('#save-tracking').click()
+            expect(page.locator('#tracking-stage')).to_have_value('REJECTED')
+            assert Store(workspace).get('offer-one')['status']=='SUBMITTED'
+            assert Store(workspace).get('offer-one')['tracking']['stage']=='REJECTED'
+
             page.locator('#back').click()
+            page.locator('[data-view="closed"]').click();expect(page.locator('#rows')).to_contain_text('Rejected')
+            page.locator('[data-view="sent"]').click();expect(page.locator('#rows [data-open]')).to_have_count(0)
+            page.locator('[data-view="all"]').click()
             for width in (375,768,1024,1440):
                 page.set_viewport_size({'width':width,'height':1000});assert page.evaluate('document.documentElement.scrollWidth<=innerWidth'),f'Dashboard overflow {width}'
             page.locator('[data-layout="grid"]').click();expect(page.locator('.table-wrap')).to_have_attribute('data-layout','grid')

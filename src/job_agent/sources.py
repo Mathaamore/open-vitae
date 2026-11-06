@@ -175,7 +175,7 @@ def recommendations(workspace, query=''):
     for job in jobs:
         if job['audit'].get('expiry') and job['audit']['expiry'] <= time.time():
             continue
-        if job['status'] == 'SUBMITTED' or job['category'] in {'CLOSED', 'INELIGIBLE'} or feedback.get(job['id'], {}).get('decision') in {'accept', 'reject', 'later'}:
+        if job.get('tracking') or job['status'] == 'SUBMITTED' or job['category'] in {'CLOSED', 'INELIGIBLE'} or feedback.get(job['id'], {}).get('decision') in {'accept', 'reject', 'later'}:
             continue
         if profile.get('strict_constraints'):
             remote = job['audit'].get('remote')

@@ -72,3 +72,14 @@ test('saved jobs prepare through connected AI and manual tools are a separate ch
   assert.match(failed,/role="alert"/);
   assert.match(failed,/&lt;unsafe&gt;/);
 });
+test('recruitment outcomes appear in the right views without hiding uncertain submissions', () => {
+  const interviewing={status:'SUBMITTED',revision:1,tracking:{stage:'INTERVIEW'}};
+  const rejected={...interviewing,tracking:{stage:'REJECTED'}};
+  context.interviewing=interviewing;context.rejected=rejected;
+  assert.equal(evaluate('displayStatus(interviewing)'), 'INTERVIEW');
+  assert.equal(evaluate("matchesFilter(interviewing,'sent')"), true);
+  assert.equal(evaluate("matchesFilter(interviewing,'INTERVIEW')"), true);
+  assert.equal(evaluate("matchesFilter(rejected,'closed')"), true);
+  assert.equal(evaluate("matchesFilter(rejected,'sent')"), false);
+  assert.equal(evaluate("displayStatus({...rejected,status:'SUBMISSION_UNCERTAIN'})"), 'SUBMISSION_UNCERTAIN');
+});

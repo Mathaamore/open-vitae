@@ -49,3 +49,9 @@ Long PDF previews are optional and collapsed until requested. Adding a job start
 ## Preparing a saved job
 
 **Prepare with ChatGPT** (or the connected service) runs integrated preparation directly from either a suggestion or a saved job. Show the queue/progress inside the job, open the materials when ready, and then offer **Review materials**. **Other ways to prepare** contains the external prompt and manual editor; never send someone there as the default AI action. A failed provider request stays visibly failed, with an explicit retry. A new AI version keeps prior drafts and files in history and cannot overwrite a concurrent edit. No preparation chooses consent, confirms eligibility or submits an application.
+
+## Recruitment progress
+
+**Update progress** opens **Progress & activity** on any saved job. Stages are **Applied**, **In review**, **Interview**, **Offer received**, **Rejected** and **Withdrawn**. Each update has an occurrence date and an optional note; notes can be added without changing the stage. **In progress** groups active recruitment; **Closed** groups rejection and withdrawal. The list also filters individual recruitment stages.
+
+These are statements recorded by the person. They do not establish an employer-verified result, submit an application, grant consent or unlock submitted documents. Tracking is separate from document preparation and submission safeguards. Updates appear in the local timeline, JSON export and workspace backups. Unsaved tracking text is protected when navigating or closing the Mac app. Schema 2 adds the tracking table after creating a database recovery point.

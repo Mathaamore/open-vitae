@@ -45,6 +45,18 @@ class ApiTest(unittest.TestCase):
         self.assertEqual(self.workspace.preparation('one')['state'],'failed')
         self.assertIsNone(self.store.get('one')['dossier'])
 
+    def test_tracking_requires_a_token_and_exports_the_history_without_saving_a_dossier(self):
+        self.store.import_jobs([{'id':'one','company':'Fictional Tools','role':'Engineer','url':'https://example.com/job'}])
+        value={'stage':'INTERVIEW','note':'Meet the team.','occurred_on':'2026-11-10','expected_updated_at':None}
+        self.assertEqual(self.client.post('/api/jobs/one/tracking',json=value).status_code,403)
+        response=self.client.post('/api/jobs/one/tracking',json=value,headers={'x-local-token':module.TOKEN})
+        self.assertEqual(response.status_code,200,response.text)
+        self.assertEqual(response.json()['tracking']['stage'],'INTERVIEW')
+        self.assertIsNone(response.json()['dossier'])
+        exported=self.client.get('/api/export').json()['jobs'][0]
+        self.assertEqual(exported['tracking']['stage'],'INTERVIEW')
+        self.assertIn('Meet the team.',exported['history']['events'][0]['details'])
+
     def test_local_read(self):
         response=self.client.get('/api/jobs');self.assertEqual(response.status_code,200);self.assertEqual(response.json(),[])
         self.assertEqual(response.headers['cache-control'],'no-store')

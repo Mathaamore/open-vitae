@@ -6,7 +6,7 @@ import sqlite3
 import tempfile
 from pathlib import Path
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 
 def prepare_database(path):

@@ -16,7 +16,7 @@ class MigrationTest(unittest.TestCase):
                 db.execute("INSERT INTO legacy_fact VALUES ('fictional fact')")
                 db.execute('PRAGMA user_version=0')
             Store(tmp)
-            backup = Path(tmp)/'data/backups/before-schema-1.sqlite3'
+            backup = Path(tmp)/f'data/backups/before-schema-{SCHEMA_VERSION}.sqlite3'
             with sqlite3.connect(backup) as db:
                 self.assertEqual(db.execute('SELECT text FROM legacy_fact').fetchone()[0], 'fictional fact')
                 self.assertEqual(db.execute('PRAGMA user_version').fetchone()[0], 0)
@@ -43,7 +43,7 @@ class MigrationTest(unittest.TestCase):
             with store.db() as db:
                 db.execute('PRAGMA user_version=0')
             directory=Path(tmp)/'data/backups';directory.mkdir()
-            (directory/'before-schema-1.sqlite3').touch()
+            (directory/f'before-schema-{SCHEMA_VERSION}.sqlite3').touch()
             with self.assertRaises(ValueError):
                 Store(tmp)
             with store.db() as db:

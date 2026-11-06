@@ -238,5 +238,9 @@
   "origin.manual": "Added by you",
   "origin.portable": "Imported AI suggestion · unverified",
   "app.based_on_my_profile": " based on my profile",
-  "prepare.connect_first": "Connect your AI service before preparing with AI. Your existing materials have not changed."
+  "prepare.connect_first": "Connect your AI service before preparing with AI. Your existing materials have not changed.",
+  "tracking.invalid": "Choose a recruitment stage, a date and a note of up to 2,000 characters.",
+  "tracking.date": "Enter a valid date in YYYY-MM-DD format.",
+  "tracking.changed": "This application’s tracking changed in another window. Reload it before adding your update.",
+  "tracking.empty": "Choose a different stage or add a note before saving."
 }
