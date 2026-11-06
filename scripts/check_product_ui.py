@@ -44,6 +44,21 @@ with tempfile.TemporaryDirectory() as tmp:
             form.locator('[name="strengths"]').fill('Python, APIs');form.locator('[name="achievements"]').fill('Built a production API with a team.');page.locator('#profile-save').click()
             expect(page.locator('#explore')).to_be_visible();page.locator('#first-search').click();expect(page.locator('.offer-suggestion')).to_have_count(2)
             expect(page.locator('#chat-log')).to_contain_text('jobs in your selection')
+            # Results scroll independently of the frame and the pinned message field.
+            page.locator('#recommendations-list').evaluate("node=>{for(let i=0;i<20;i++){const copy=node.firstElementChild.cloneNode(true);copy.dataset.qaClone='true';node.append(copy)}}")
+            for width,height in ((1440,900),(1280,720),(1024,768),(840,580),(375,812)):
+                page.set_viewport_size({'width':width,'height':height})
+                if width<=1000:page.locator('[data-discovery-pane="jobs"]').click()
+                assert page.evaluate('document.documentElement.scrollHeight<=innerHeight'),str(page.evaluate("Object.fromEntries(['html','body','#workspace-root','.app-shell','#main','#explore','.explore-grid','.recommendations-column','#recommendations-list'].map(s=>{const n=document.querySelector(s);return [s,{height:n.clientHeight,scroll:n.scrollHeight,bottom:n.getBoundingClientRect().bottom,overflow:getComputedStyle(n).overflow,rows:getComputedStyle(n).gridTemplateRows}]}))"))
+                assert page.locator('#main').evaluate('(node)=>node.scrollHeight<=node.clientHeight'),f'Discovery frame scroll {width}'
+                assert page.locator('#recommendations-list').evaluate('(node)=>node.scrollHeight>node.clientHeight'),f'Missing results scroll {width}'
+                assert page.locator('.sidebar').evaluate('(node)=>node.scrollHeight<=node.clientHeight'),f'Sidebar scroll {width}'
+                page.locator('#recommendations-list').evaluate('(node)=>node.scrollTop=node.scrollHeight')
+                if width<=1000:page.locator('[data-discovery-pane="conversation"]').click()
+                assert page.locator('#chat-input').evaluate('(node)=>node.getBoundingClientRect().bottom<=innerHeight'),f'Composer obscured {width}'
+            page.locator('[data-qa-clone]').evaluate_all('(nodes)=>nodes.forEach(node=>node.remove())')
+            page.locator('#recommendations-list').evaluate('(node)=>node.scrollTop=0')
+            page.set_viewport_size({'width':1440,'height':1000})
             page.screenshot(path=str(out/'product-search.png'))
             page.locator('#chat-input').fill('Je préfère une petite équipe produit.');page.locator('#chat-send').click();expect(page.locator('#chat-log')).to_contain_text('We can refine')
             page.get_by_role('button',name='Apply preferences').click()
@@ -51,33 +66,123 @@ with tempfile.TemporaryDirectory() as tmp:
             page.locator('[data-id="offer-two"][data-interest="reject"]').click();expect(page.locator('.offer-suggestion')).to_have_count(1)
             page.get_by_role('button',name='Undo',exact=True).click();expect(page.locator('.offer-suggestion')).to_have_count(2)
             page.locator('[data-id="offer-two"][data-interest="reject"]').click();expect(page.locator('.offer-suggestion')).to_have_count(1)
-            page.locator('[data-id="offer-one"][data-interest="accept"]').click();expect(page.locator('.offer-suggestion')).to_have_count(0)
+            page.locator('[data-id="offer-one"][data-interest="later"]').click();expect(page.locator('.offer-suggestion')).to_have_count(0)
             page.locator('[data-screen="dashboard"]').click();expect(page.locator('#rows [data-open="offer-one"]')).to_be_visible()
+            page.locator('[data-open="offer-one"]').click()
+            page.locator('[data-prepare-job="offer-one"]').click()
+            expect(page.locator('#tools-screen')).to_be_hidden()
             for _ in range(100):
                 job=Store(workspace).get('offer-one')
                 if job['revision']:break
                 time.sleep(.1)
             assert job['revision']==1,job
-            page.locator('[data-open="offer-one"]').click();expect(page.locator('#panel-dossier')).to_be_visible()
+            expect(page.locator('#panel-dossier')).to_be_visible()
+            expect(page.locator('[data-answer="body"]')).to_have_value('I build useful products with Python and enjoy working with product teams.')
+            page.screenshot(path=str(out/'product-ai-prepared.png'))
             page.locator('#tab-offre').click();page.locator('#eligibility-checked').check();page.locator('#form-checked').check();page.locator('#confirm-checks').click()
             expect(page.locator('#message')).to_contain_text('Checks saved')
             page.locator('#tab-dossier').click();page.locator('[data-bool="consent"]').check();page.locator('#save').click();expect(page.locator('#review-dossier')).to_be_visible()
             page.screenshot(path=str(out/'product-dossier.png'))
             import shutil
-            shutil.copyfile(workspace/'data/dossiers/offer-one/resume.pdf',out/'product-resume.pdf')
+            shutil.copyfile(workspace/job['dossier']['attachments'][0]['path'],out/'product-resume.pdf')
             page.locator('#review-dossier').click();expect(page.locator('#record-receipt')).to_be_visible();page.locator('#record-receipt').click();expect(page.locator('#panel-suivi')).to_be_visible()
             assert Store(workspace).get('offer-one')['status']=='SUBMITTED'
             page.locator('#back').click()
             for width in (375,768,1024,1440):
                 page.set_viewport_size({'width':width,'height':1000});assert page.evaluate('document.documentElement.scrollWidth<=innerWidth'),f'Dashboard overflow {width}'
+            page.locator('[data-layout="grid"]').click();expect(page.locator('.table-wrap')).to_have_attribute('data-layout','grid')
+            assert page.locator('.layout-switch [aria-pressed=true]').count()==1
             page.screenshot(path=str(out/'product-dashboard.png'))
+            page.locator('[data-layout="list"]').click();expect(page.locator('.table-wrap')).to_have_attribute('data-layout','list')
             page.emulate_media(color_scheme='dark',reduced_motion='reduce')
             page.screenshot(path=str(out/'product-dashboard-dark.png'))
             page.locator('#assistant-open').click();expect(page.locator('#settings-screen')).to_be_visible()
-            page.locator('#source-boards').fill('ashby:example');page.locator('#save-source-boards').click()
+            page.locator('[data-settings-tab="sources"]').click();page.locator('#source-boards').fill('ashby:example');page.locator('#save-source-boards').click()
             expect(page.locator('#message')).to_contain_text('Sources saved')
             page.locator('[data-screen="explore"]').click();page.set_viewport_size({'width':375,'height':812});assert page.evaluate('document.documentElement.scrollWidth<=innerWidth')
             page.screenshot(path=str(out/'product-search-mobile.png'))
+            page.locator('[data-discovery-pane="conversation"]').click()
+            # A long transcript cannot push the composer out of a laptop window.
+            page.locator('#chat-log').evaluate("node => {for(let i=0;i<80;i++){const p=document.createElement('p');p.textContent='Fictional conversation entry '.repeat(20);node.append(p)}}")
+            for width,height in ((1280,720),(1024,768),(840,580),(768,1000),(375,812)):
+                page.set_viewport_size({'width':width,'height':height})
+                page.evaluate('window.scrollTo(0,0)')
+                assert page.locator('#chat-input').evaluate('(node)=>{const r=node.getBoundingClientRect();return r.top>=0 && r.bottom<=innerHeight}'),f'Composer hidden at {width}x{height}'
+                assert page.evaluate('document.documentElement.scrollWidth<=innerWidth'),f'Discovery overflow {width}'
+                assert page.evaluate('document.documentElement.scrollHeight<=innerHeight'),f'Body scroll {width}'
+                assert page.locator('#main').evaluate('(node)=>node.scrollHeight<=node.clientHeight'),f'Nested page scroll {width}'
+                assert page.locator('.sidebar').evaluate('(node)=>node.scrollHeight<=node.clientHeight'),f'Sidebar scroll {width}'
+            page.set_viewport_size({'width':1280,'height':720})
+            page.screenshot(path=str(out/'product-chat-laptop.png'))
+            page.set_viewport_size({'width':375,'height':812})
+            page.locator('[data-discovery-pane="jobs"]').click()
+            expect(page.locator('.recommendations-column')).to_be_visible()
+            expect(page.locator('.conversation-column')).to_be_hidden()
+            page.locator('[data-discovery-pane="conversation"]').click()
+            expect(page.locator('#chat-input')).to_be_visible()
+            page.set_viewport_size({'width':1280,'height':720})
+            page.locator('#assistant-open').click()
+            # Exercise the OAuth UI without signing in or sending data to a real provider.
+            state={'connected':False,'available':True,'provider':'chatgpt','name':'ChatGPT','pending':True}
+            page.route('**/api/providers',lambda route:route.fulfill(json=state))
+            page.route('**/api/providers/connect',lambda route:route.fulfill(json={'url':'https://auth.openai.com/authorize?fictional=1'}))
+            page.locator('[data-screen="explore"]').click()
+            page.locator('#assistant-open').click()
+            expect(page.locator('#connected-provider-detail')).to_contain_text('No AI connected')
+            expect(page.locator('#provider-disconnect')).to_be_hidden()
+            page.locator('[data-screen="explore"]').click()
+            page.locator('#chat-input').fill('Keep this fictional message while I connect.')
+            page.get_by_role('button',name='Connect AI',exact=True).click()
+            expect(page.locator('#connection-dialog')).to_be_visible()
+            page.locator('#connection-close').click()
+            expect(page.locator('#chat-input')).to_have_value('Keep this fictional message while I connect.')
+            page.locator('#assistant-open').click()
+            page.locator('#provider-change').click()
+            expect(page.locator('#connection-dialog')).to_be_visible()
+            expect(page.locator('#workspace-root')).to_be_visible()
+            page.locator('[data-provider="chatgpt"]').click()
+            page.locator('#connect-provider').click()
+            expect(page.locator('#oauth-continue')).to_have_attribute('href','https://auth.openai.com/authorize?fictional=1')
+            expect(page.locator('#connection-progress')).to_contain_text('1 of 2')
+            page.screenshot(path=str(out/'product-connect-chatgpt.png'))
+            state.update(pending=False,error='Sign-in did not finish. Try again.')
+            page.locator('#connection-check').click()
+            expect(page.locator('#gate-message')).to_contain_text('Sign-in did not finish')
+            expect(page.locator('#connection-retry')).to_be_visible()
+            state.pop('error');state['pending']=True
+            page.locator('#connection-retry').click()
+            expect(page.locator('#oauth-continue')).to_be_visible()
+            state.update(connected=True,pending=False,email='fictional@example.com')
+            page.locator('#connection-check').click()
+            expect(page.locator('#connection-dialog')).not_to_be_visible()
+            expect(page.locator('#settings-screen')).to_be_visible()
+            expect(page.locator('#connected-provider-detail')).to_have_text('fictional@example.com')
+            expect(page.locator('#sidebar-ai-status')).to_contain_text('Connected to ChatGPT')
+            # Escape restores the shared connection panel and does not hide the workspace.
+            page.locator('#provider-change').click();page.keyboard.press('Escape')
+            expect(page.locator('#connection-dialog')).not_to_be_visible()
+            page.locator('#provider-change').click()
+            expect(page.locator('#connection-dialog [data-provider="chatgpt"]')).to_be_visible()
+            page.locator('#connection-close').click()
+            page.unroute('**/api/providers');page.unroute('**/api/providers/connect')
+            page.reload()
+            expect(page.locator('#sidebar-ai-status')).to_contain_text('Connected to Gemini')
+            page.locator('#add-job').click()
+            expect(page.locator('#manual-details')).not_to_have_attribute('open','')
+            assert page.locator('#manual-job-dialog').evaluate('(node)=>node.scrollHeight<=node.clientHeight'), 'Collapsed add job dialog scrolls'
+            page.screenshot(path=str(out/'product-add-job.png'))
+            page.locator('#manual-details').click()
+            expect(page.locator('#manual-job-form [name="description"]')).to_be_visible()
+            page.locator('#manual-close').click()
+            page.locator('#assistant-open').click()
+            for tab in ('account','sources','data'):
+                page.locator(f'[data-settings-tab="{tab}"]').click()
+                expect(page.locator(f'[data-settings-panel="{tab}"]')).to_be_visible()
+                assert page.locator('[data-settings-panel]:visible').count()==1
+                assert page.evaluate('document.documentElement.scrollHeight<=innerHeight')
+            page.screenshot(path=str(out/'product-settings.png'))
+            page.locator('[data-screen="tools-screen"]').click();page.locator('#home-link').click()
+            expect(page.locator('#dashboard')).to_be_visible();expect(page.locator('#tools-screen')).to_be_hidden()
             assert not errors,errors
             browser.close()
         print('Integrated journey passed: optional provider connection, onboarding, local CV import, chat, offer feedback, preparation, factual PDF, explicit checks/consent, manual sent record, responsive UI. Fake providers/sources and temporary data only.')

@@ -80,10 +80,36 @@ class ProductTest(unittest.TestCase):
         self.assertEqual(job['dossier']['answers']['name'],'Alex Example')
         self.assertEqual(job['dossier']['answers']['consent'],'')
         self.assertEqual(job['status'],'NEEDS_INPUT')
-        self.assertTrue((self.root/'data/dossiers/one/resume.pdf').read_bytes().startswith(b'%PDF'))
+        self.assertTrue((self.root/job['dossier']['attachments'][0]['path']).read_bytes().startswith(b'%PDF'))
         before=job['fingerprint']
         packets.prepare(self.ws,provider,'one');self.assertEqual(self.store.get('one')['fingerprint'],before)
         self.assertEqual(provider.complete.call_count,1)
+    def test_ai_preparation_upgrades_a_local_draft_without_overwriting_its_files(self):
+        from job_agent import portable
+        self.ws.save_profile(PROFILE);self.offer();portable.draft(self.ws,'one')
+        before=self.store.get('one');old_file=self.root/before['dossier']['attachments'][0]['path'];old_bytes=old_file.read_bytes()
+        provider=Mock();provider.complete.return_value={'summary':'A grounded draft.','selected_facts':[0],'company_summary':'Example builds APIs.','product_summary':'APIs','team_summary':'Unknown','answers':{'body':'I built a production API with a team.'}}
+        form={'url':'https://example.com/job/one','inspected':False,'text':'Example builds APIs.','fields':packets.fallback_fields()}
+        with patch.object(packets,'inspect_offer',return_value=form):
+            packets.prepare(self.ws,provider,'one',replace=True,expected_revision=before['revision'],expected_updated_at=before['updated_at'])
+        after=self.store.get('one')
+        self.assertEqual(after['revision'],2)
+        self.assertEqual(after['dossier']['answers']['body'],'I built a production API with a team.')
+        self.assertIn('Example',after['audit']['company_context']['company']['summary'])
+        self.assertNotEqual(before['dossier']['attachments'][0]['path'],after['dossier']['attachments'][0]['path'])
+        self.assertEqual(old_file.read_bytes(),old_bytes)
+        self.assertEqual(len(self.store.history('one')['versions']),2)
+        # An employer-detail edit during generation must not be overwritten.
+        before=self.store.get('one')
+        def changed(*args,**kwargs):
+            self.store.audit('one',{**before['audit'],'description':'Changed independently'})
+            return provider.complete.return_value
+        provider.complete.side_effect=changed
+        with patch.object(packets,'inspect_offer',return_value=form),self.assertRaises(ValueError):
+            packets.prepare(self.ws,provider,'one',replace=True,expected_revision=before['revision'],expected_updated_at=before['updated_at'])
+        self.assertEqual(self.store.get('one')['revision'],2)
+        self.assertEqual(self.store.get('one')['audit']['description'],'Changed independently')
+
     def test_provider_reuses_cache_and_does_not_silently_switch_models(self):
         codex=Mock();codex.status.return_value={'connected':True};codex.complete.return_value={'text':'A reply','_model':'catalog-mini','_usage':{'outputTokens':4}}
         provider=Providers(self.ws,codex)

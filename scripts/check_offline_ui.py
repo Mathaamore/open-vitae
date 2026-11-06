@@ -43,14 +43,14 @@ def main():
                 manual.locator('[name="company"]').fill('Fictional Tools');manual.locator('[name="role"]').fill('Python engineer');page.locator('#manual-save').click()
                 expect(page.locator('#job-title')).to_contain_text('Fictional Tools');identity=page.url.split('job=')[1].split('&')[0]
                 page.locator('[data-edit-opportunity]').click();manual.locator('[name="description"]').fill('A documented Python role. Eligibility and salary unverified.');page.locator('#manual-save').click()
-                page.locator('[data-local-tools]').click();expect(page.locator('#tools-screen')).to_be_visible()
+                page.locator('.preparation-alternatives').click();page.locator('[data-local-tools]').click();expect(page.locator('#tools-screen')).to_be_visible()
                 page.locator('#local-draft-details').click();page.locator('#local-motivation').fill('I build useful Python services.');page.locator('#local-draft').click()
                 expect(page.locator('#panel-dossier')).to_be_visible();expect(page.locator('[data-answer="body"]')).to_have_value('I build useful Python services.')
                 page.locator('[data-answer="body"]').fill('My edited factual draft.');page.locator('#save').click();expect(page.locator('#message')).to_contain_text('Changes saved')
                 page.locator('#tab-offre').click();page.locator('#eligibility-checked').check();page.locator('#form-checked').check();page.locator('#confirm-checks').click()
                 expect(page.locator('#review-dossier')).to_be_visible()
                 page.locator('#review-dossier').click();page.locator('#record-receipt').click();expect(page.locator('#panel-suivi')).to_contain_text('Applied')
-                page.locator('[data-local-tools]').click();page.locator('#portable-kind').select_option('job_search_results');page.locator('#portable-generate').click();expect(page.locator('#portable-prompt')).not_to_have_value('')
+                page.locator('.preparation-alternatives').click();page.locator('[data-local-tools]').click();page.locator('#portable-kind').select_option('job_search_results');page.locator('#portable-generate').click();expect(page.locator('#portable-prompt')).not_to_have_value('')
                 prompt=page.locator('#portable-prompt').input_value();ctx=json.loads(prompt.split('EXPECTED SHAPE:\n')[1].split('\n\nSOURCE MATERIAL:')[0])['context']
                 invalid={'schema_version':2,'type':'application_draft','context':ctx,'data':{}}
                 page.locator('#portable-input').fill(json.dumps(invalid));page.locator('#portable-preview').click();expect(page.locator('#portable-status')).to_contain_text('result version')
@@ -63,9 +63,11 @@ def main():
                 page.locator('[data-screen="dashboard"]').click();expect(page.locator('#rows [data-open]')).to_have_count(2)
                 page.locator('[data-view="saved"]').click();expect(page.locator('#rows [data-open]')).to_have_count(1)
                 page.locator('[data-screen="tools-screen"]').click()
+                page.locator('#assistant-open').click();page.locator('[data-settings-tab="data"]').click()
                 with page.expect_download() as download:page.locator('#backup-data').click()
                 assert download.value.suggested_filename=='open-vitae-backup.zip'
-                page.evaluate('window.scrollTo(0,0)')
+                page.locator('[data-screen="tools-screen"]').click()
+                page.locator('#main').evaluate('(node)=>node.scrollTop=0')
                 page.locator('#tools-title').evaluate('(element)=>{element.tabIndex=-1;element.focus()}')
                 page.screenshot(path=str(output/'offline-tools.png'),full_page=True)
                 for width in (390,768,1024,1440):

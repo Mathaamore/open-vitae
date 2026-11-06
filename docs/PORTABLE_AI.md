@@ -18,7 +18,7 @@ URL identity lowercases the host, removes the HTTPS default port, trailing slash
 4. Drop/select the returned JSON, or paste it. **Preview import** validates and shows the content and duplicates without writing data. Changing the input disables confirmation until another preview.
 5. Confirm that exact preview. The server revalidates against current profile/job context; stale files require a new prompt. Duplicate listings reuse their existing records. Profile analyses are stored as suggestions separate from candidate facts. Job analyses are labelled external and unverified. Application drafts create an editable version and select only existing numbered facts for the PDF.
 
-Connect an integrated AI later from **AI and usage**. Disconnected chat offers the portable workflow; it does not force a setup screen. If an integrated preparation fails and no dossier exists, the app preserves a local draft instead. Reconnecting does not create a separate workspace or tracker.
+Connect an integrated AI later from **AI and usage**. Disconnected chat offers the portable workflow; it does not force a setup screen. If integrated preparation fails, the app shows the error and preserves existing materials; it never reports a local fallback as successful AI preparation. Choose the separate manual workflow when wanted. Reconnecting does not create a separate workspace or tracker.
 
 ## Version 1 envelope
 

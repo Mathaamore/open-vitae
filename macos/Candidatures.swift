@@ -192,7 +192,10 @@ final class CandidaturesApp: NSObject, NSApplicationDelegate, NSWindowDelegate, 
         }.resume()
     }
 
-    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) { loading.isHidden = true; web.isHidden = false }
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        guard let url = webView.url, isLocal(url) else { return }
+        loading.isHidden = true; web.isHidden = false
+    }
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) { self.error(L("Your workspace could not be displayed. Choose View → Reload to try again.")) }
     func isLocal(_ url: URL) -> Bool { url.scheme == base?.scheme && url.host == base?.host && url.port == base?.port }
     func webView(_ webView: WKWebView, decidePolicyFor action: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {

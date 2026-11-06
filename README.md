@@ -52,7 +52,7 @@ python3 -m venv .venv
 .venv/bin/python -m job_agent.main
 ```
 
-Open **http://127.0.0.1:8765**. Choose **Commencer sans compte ni IA**, complete your profile and add an offer. Connect a provider later if you want integrated assistance. ChatGPT requires the official Codex CLI on PATH when running from source; Claude and Gemini require a working OS keyring. Tests use fake providers and do not require keys.
+Open **http://127.0.0.1:8765**. Choose **Get started**, complete your profile and add an offer. Connect a provider later if you want integrated assistance. ChatGPT requires the official Codex CLI on PATH when running from source; Claude and Gemini require a working OS keyring. Tests use fake providers and do not require keys.
 
 The default Mac workspace is `~/Library/Application Support/Candidatures`; the historical directory name is retained for compatibility. On Linux the service uses `$XDG_DATA_HOME/candidatures` or `~/.local/share/candidatures`. To use a separate development space:
 

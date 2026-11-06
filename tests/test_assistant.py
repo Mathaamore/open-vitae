@@ -1,4 +1,6 @@
 import json
+import io
+from types import SimpleNamespace
 import os
 from pathlib import Path
 import sys
@@ -34,6 +36,20 @@ class AssistantTest(unittest.TestCase):
         for url in ['javascript:alert(1)','http://auth.openai.com/a','https://auth.openai.com.evil.test','https://evil@chatgpt.com']:
             with self.assertRaises(AssistantError):login_url(url)
 
+
+    def test_old_login_completion_does_not_cancel_the_current_attempt(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            assistant=CodexAssistant(tmp)
+            assistant.login_id='current-login'
+            def completion(identity, success):
+                event={'method':'account/login/completed','params':{'loginId':identity,'success':success}}
+                assistant.read(SimpleNamespace(stdout=io.StringIO(json.dumps(event)+'\n')))
+            completion('old-login',False)
+            self.assertEqual(assistant.login_id,'current-login')
+            self.assertIsNone(assistant.login_error)
+            completion('current-login',False)
+            self.assertIsNone(assistant.login_id)
+            self.assertTrue(assistant.login_error)
 
     def test_protocol_connection_generation_and_isolated_read_only_thread(self):
         with tempfile.TemporaryDirectory() as tmp:

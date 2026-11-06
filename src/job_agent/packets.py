@@ -8,6 +8,7 @@ import json
 import os
 from pathlib import Path
 import re
+import uuid
 from urllib.parse import urljoin, urlsplit
 
 from .net import public_url, request
@@ -173,12 +174,14 @@ def pdf_bytes(profile, role, summary, selected):
     return out.getvalue()
 
 
-def prepare(workspace, providers, job_id):
+def prepare(workspace, providers, job_id, replace=False, expected_revision=None, expected_updated_at=None):
     store = workspace.store
     job = store.get(job_id)
     if job['status'] in LOCKED:
         raise ValueError(tr('portable.this_application_has_a_recorded_or_uncertain_submission_2'))
-    if job['revision']:
+    if expected_revision is not None and (job['revision'] != expected_revision or job['updated_at'] != expected_updated_at):
+        raise ValueError(tr('packets.your_profile_or_application_changed_during_preparation_start'))
+    if job['revision'] and not replace:
         workspace.preparation(job_id, 'ready', tr('packets.your_existing_materials_and_edits_have_been_kept'))
         return
     profile = workspace.profile()
@@ -222,10 +225,10 @@ def prepare(workspace, providers, job_id):
         'questions': [{'key': field['key'], 'label': field['label'][:1500]} for field in text_fields]}, max_output=4000, validator=validate)
     validate(result)
     summary, selected, generated = result['summary'], result['selected_facts'], result['answers']
-    if digest(workspace.profile()) != original_profile or store.get(job_id)['revision'] != job['revision']:
+    if digest(workspace.profile()) != original_profile or store.get(job_id)['revision'] != job['revision'] or store.get(job_id)['updated_at'] != job['updated_at']:
         raise ValueError(tr('packets.your_profile_or_application_changed_during_preparation_start'))
-    folder = store.root/'data/dossiers'/job_id; folder.mkdir(parents=True, exist_ok=True)
-    path = f'data/dossiers/{job_id}/resume.pdf'
+    folder = store.root/'data/dossiers'/job_id/('ai-'+uuid.uuid4().hex); folder.mkdir(parents=True, exist_ok=True)
+    path = str((folder/'resume.pdf').relative_to(store.root))
     pdf = pdf_bytes(profile, job['role'], summary, [source_facts[i] for i in selected])
     answers = {}
     for field in info['fields']:
@@ -253,7 +256,6 @@ def prepare(workspace, providers, job_id):
                  'sources': [context_url], 'basis': context_basis, 'checked_on': now()[:10]}, 'role': {'team': None, 'scope': result['team_summary'], 'sources': [context_url]}},
              'warnings': list(dict.fromkeys(job['audit'].get('warnings', []) + ([info['warning']] if info.get('warning') else []) + [tr('packets.ai_assisted_draft_review_the_facts_before_using')]))}
     # Source/form retrieval is not proof of geographic eligibility or of an open position.
-    store.audit(job_id, audit)
     (folder/'resume.pdf').write_bytes(pdf)
     (folder/'resume.json').write_text(json.dumps({'profile_revision': profile['revision'], 'summary': summary, 'selected_facts': [source_facts[i] for i in selected]}, ensure_ascii=False))
     (folder/'tailoring.json').write_text(json.dumps({'source': info['url'], 'exact_form': info['inspected'], 'facts_verbatim': True}, ensure_ascii=False))
@@ -261,5 +263,5 @@ def prepare(workspace, providers, job_id):
     store.save(job_id, {'answers': answers, 'motivation': '', 'missing': missing,
         'form': {key: value for key, value in info.items() if key in {'url', 'fields', 'inspected'}},
         'attachments': [{'label': tr('portable.cv_draft'), 'path': path}],
-        'submission': {'mode': 'manual', 'reason': tr('packets.complete_and_send_this_application_on_the_employer')}}, job['revision'])
+        'submission': {'mode': 'manual', 'reason': tr('packets.complete_and_send_this_application_on_the_employer')}}, job['revision'], expected_updated_at=job['updated_at'], audit=audit)
     workspace.preparation(job_id, 'ready', tr('packets.your_materials_are_ready_to_review_check_any'))

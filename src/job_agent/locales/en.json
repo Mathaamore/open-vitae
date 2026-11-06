@@ -237,5 +237,6 @@
   "queue.start": "Preparation is queued…",
   "origin.manual": "Added by you",
   "origin.portable": "Imported AI suggestion · unverified",
-  "app.based_on_my_profile": " based on my profile"
+  "app.based_on_my_profile": " based on my profile",
+  "prepare.connect_first": "Connect your AI service before preparing with AI. Your existing materials have not changed."
 }

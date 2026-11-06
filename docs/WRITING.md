@@ -33,3 +33,19 @@ Never translate saved profiles, CVs, job descriptions, employer questions or app
 - **Your next move, thoughtfully prepared.** Warm, but hides discovery and overemphasizes documents.
 
 The supporting copy explains finding suitable jobs, understanding a role and preparing from actual experience. The availability action stays honest until a verified Mac installer exists. No claims of guaranteed interviews, automated applications or fabricated social proof.
+
+## Interaction hierarchy
+
+Discovery keeps its message composer visible. Conversation history and job results scroll inside their respective panes; the surrounding window stays fixed. Small windows show Conversation and Suggested jobs as separate panels rather than stacking both. Search works without AI. A disconnected chat offers **Connect AI** and preserves typed text. The sidebar separates discovery, application tracking and external AI imports, with account status beside AI settings. Connecting a service stays in a dialog over the workspace rather than restarting onboarding.
+
+The UI UX Pro Max review prioritizes visible form labels, bounded viewport layout, honest connection state, progress and recovery, keyboard focus and contrast. Existing Geist typography and green brand tokens remain; this is a workflow correction rather than a new visual identity. Browser checks exercise long transcripts, small laptop windows, mobile widths, modal dismissal, failed sign-in and retry, and restored connection state using fictional providers.
+
+## Workspace layout
+
+The Mac app uses a fixed frame with a quiet sidebar and a stable screen header. Tracker, application, AI imports and settings each use one main page scroller. Discovery deliberately has two content scrollers on a wide window, with bounded history and results; compact windows switch between those panes. Do not add another viewport height or nested scrolling wrapper to a screen. Use the existing content container.
+
+Long PDF previews are optional and collapsed until requested. Adding a job starts with its link and exposes manual details on request or retrieval failure. Settings group AI connection, job sources and workspace exports. Notifications can be dismissed and do not push the message field around. The browser regression checks use long conversations and result lists at 840 × 580 through 1440 × 900, with small mobile widths, light/dark appearance and reduced motion.
+
+## Preparing a saved job
+
+**Prepare with ChatGPT** (or the connected service) runs integrated preparation directly from either a suggestion or a saved job. Show the queue/progress inside the job, open the materials when ready, and then offer **Review materials**. **Other ways to prepare** contains the external prompt and manual editor; never send someone there as the default AI action. A failed provider request stays visibly failed, with an explicit retry. A new AI version keeps prior drafts and files in history and cannot overwrite a concurrent edit. No preparation chooses consent, confirms eligibility or submits an application.

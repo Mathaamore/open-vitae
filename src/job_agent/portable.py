@@ -167,7 +167,7 @@ def draft(workspace, identity, data=None, revision=None, updated_at=None):
     dossier={'answers':{'name':profile['name'],'email':profile.get('email',''),'body':data['motivation'],'resume':path},
         'motivation':data['motivation'],'missing':[tr('portable.check_the_exact_questions_on_the_employer_s')],
         'form':{'url':job['url'],'fields':packets.fallback_fields(),'inspected':False},
-        'attachments':[{'label':tr('portable.cv_draft'),'path':path}], 'submission':{'mode':'manual','reason':'Envoi manuel uniquement.'}}
+        'attachments':[{'label':tr('portable.cv_draft'),'path':path}], 'submission':{'mode':'manual','reason':tr('packets.complete_and_send_this_application_on_the_employer')}}
     if digest(workspace.profile())!=digest(profile):raise ValueError(tr('portable.your_profile_has_changed_create_the_draft_again'))
     workspace.store.save(identity,dossier,job['revision'],job['updated_at'])
     workspace.decide(identity,'accept')

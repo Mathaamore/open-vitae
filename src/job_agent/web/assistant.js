@@ -42,7 +42,7 @@
   el('login').onclick = () => { el('dialog').close(); window.WorkspaceUI.openSettings(); };
   el('logout').onclick = async () => {
     el('logout').disabled = true;
-    try { await api('/api/assistant/logout', {method:'POST', body:'{}'}); feedback(t("assistant.ai_disconnected_your_application_materials_are_still_here")); await status(); el('dialog').close(); window.WorkspaceUI.showConnection(); }
+    try { await api('/api/assistant/logout', {method:'POST', body:'{}'}); feedback(t("assistant.ai_disconnected_your_application_materials_are_still_here")); await status(); el('dialog').close(); window.WorkspaceUI.openSettings(); }
     catch (error) { feedback(error.message, true); controls(); }
   };
   el('generate').onclick = async () => {

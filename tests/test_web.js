@@ -60,3 +60,15 @@ test('English fallback and interpolation preserve source text', () => {
   evaluate("I18n.setLocale('unknown')");
   assert.equal(evaluate('I18n.locale'), 'en');
 });
+test('saved jobs prepare through connected AI and manual tools are a separate choice', () => {
+  evaluate("globalThis.window={WorkspaceUI:{connection:{connected:true,name:'ChatGPT'}}}");
+  const html=evaluate("preparationActions({id:'saved',status:'NEEDS_INPUT',audit:{},dossier:null},false)");
+  assert.match(html, /class="primary" data-prepare-job="saved"/);
+  assert.match(html, /Prepare with ChatGPT/);
+  assert.match(html, /<details class="preparation-alternatives">/);
+  const ready=evaluate("preparationActions({id:'saved',status:'NEEDS_INPUT',audit:{company_context:{}},dossier:{}},false)");
+  assert.match(ready, /data-review-materials/);
+  const failed=evaluate("preparationPanel({preparation:{state:'failed',message:'<unsafe> provider failure'}})");
+  assert.match(failed,/role="alert"/);
+  assert.match(failed,/&lt;unsafe&gt;/);
+});

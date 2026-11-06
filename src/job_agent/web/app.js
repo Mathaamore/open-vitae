@@ -39,8 +39,14 @@ async function api(path, options = {}) {
   return result;
 }
 function message(text, error = false) {
-  const node = $('#message'); node.textContent = text; node.hidden = !text;
+  const node = $('#message'); node.replaceChildren(); node.hidden = !text;
   node.className = 'message' + (error ? ' error' : ''); node.setAttribute('role', error ? 'alert' : 'status');
+  if (!text) return;
+  const copy = document.createElement('span'); copy.textContent = text;
+  const close = document.createElement('button'); close.className = 'quiet dismiss-message'; close.setAttribute('aria-label', t('screen.close'));
+  close.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg>';
+  close.onclick = () => {node.hidden = true;};
+  node.append(copy, close);
 }
 function syncUrl() {
   const params = new URLSearchParams();
@@ -83,7 +89,7 @@ function updateViews() {
 async function refreshJobs() {
   jobs = await api('/api/jobs');
   const prepared = jobs.filter(job => job.revision > 0).length, sent = jobs.filter(job => job.status === 'SUBMITTED').length;
-  $('#summary').textContent = `${prepared} drafts · ${sent} applied`;
+  $('#summary').textContent = `${prepared} with materials · ${sent} applied`;
   if ($('#tracked-count')) $('#tracked-count').textContent = jobs.filter(job => matchesFilter(job, 'tracked')).length;
   updateViews(); table();
 }
@@ -95,17 +101,21 @@ function setLayout(value) {
 }
 function home() {
   if (dirty) { message(t("app.save_or_discard_your_changes_before_leaving_this"), true); return; }
-  if ($('#explore')) $('#explore').hidden = true; if ($('#settings-screen')) $('#settings-screen').hidden = true;
+  if ($('#explore')) $('#explore').hidden = true; if ($('#settings-screen')) $('#settings-screen').hidden = true; if ($('#tools-screen')) $('#tools-screen').hidden = true;
+  document.querySelectorAll('[data-screen]').forEach(button=>button.toggleAttribute('aria-current',false));
+  document.querySelector('[data-screen=dashboard]').setAttribute('aria-current','page'); $('#screen-title').textContent=t('app.applications');
   $('#review').hidden = true; $('#dashboard').hidden = false; current = undefined; message(''); document.title = t("app.open_vit_applications");
-  syncUrl(); window.scrollTo(0,0); $('#dashboard-title').focus();
+  syncUrl(); $('#main').scrollTop=0; $('#dashboard-title').focus();
 }
 async function open(id) {
   if (dirty) { message(t("app.save_or_discard_your_changes_before_opening_another"), true); return; }
   try {
     message(''); current = await api('/api/jobs/' + encodeURIComponent(id)); dirty = false;
     currentTab = current.dossier ? 'dossier' : 'offre';
-    if ($('#explore')) $('#explore').hidden = true; if ($('#settings-screen')) $('#settings-screen').hidden = true;
-    $('#dashboard').hidden = true; $('#review').hidden = false; render(); window.scrollTo(0,0);
+    if ($('#explore')) $('#explore').hidden = true; if ($('#settings-screen')) $('#settings-screen').hidden = true; if ($('#tools-screen')) $('#tools-screen').hidden = true;
+    document.querySelectorAll('[data-screen]').forEach(button=>button.removeAttribute('aria-current'));
+    document.querySelector('[data-screen=dashboard]').setAttribute('aria-current','page'); $('#screen-title').textContent=t('app.applications');
+    $('#dashboard').hidden = true; $('#review').hidden = false; render(); $('#main').scrollTop=0;
     document.title = `${current.company} — Open Vitæ`; $('#job-title').focus();
   } catch (error) { message(error.message, true); }
 }
@@ -153,7 +163,7 @@ function dossier(job, data) {
   const form = data.form || {fields:[]}, readonly = lockedStatuses.includes(job.status), base = '/api/jobs/' + encodeURIComponent(job.id);
   return `${job.problems.length && !readonly ? `<div class="notice"><strong>${esc(t("app.encore"))} ${job.problems.length} ${esc(t("app.item"))}${job.problems.length > 1 ? 's' : ''} ${esc(t("app.to_complete"))}</strong><ul>${job.problems.map(text => `<li>${esc(text)}</li>`).join('')}</ul></div>` : ''}
     ${readonly ? `<p class="footnote">${esc(t("app.recorded_application_you_can_still_read_and_copy"))}</p>` : ''}
-    <div class="split"><div class="document-column"><div class="section-bar"><h2>${esc(t("app.your_cv_draft"))}</h2><a class="button-link" href="${base}/artifact/resume.pdf" target="_blank">${esc(t("app.open_pdf"))}</a></div><iframe class="pdf" title="CV draft for ${esc(job.company)}" src="${base}/artifact/resume.pdf"></iframe><div class="file-links"><a href="${base}/artifact/resume.json" target="_blank">${esc(t("app.draft_source"))}</a><a href="${base}/artifact/tailoring.json" target="_blank">${esc(t("app.preparation_details"))}</a></div><p class="document-note">${esc(t("app.download_the_pdf_to_attach_to_your_application"))}</p></div>
+    <div class="split"><div class="document-column"><div class="section-bar"><h2>${esc(t("app.your_cv_draft"))}</h2><a class="button-link" href="${base}/artifact/resume.pdf" target="_blank">${esc(t("app.open_pdf"))}</a></div><details class="document-preview"><summary>${esc(t("clean.preview_pdf"))}</summary><iframe loading="lazy" class="pdf" title="CV draft for ${esc(job.company)}" src="${base}/artifact/resume.pdf"></iframe></details><div class="file-links"><a href="${base}/artifact/resume.json" target="_blank">${esc(t("app.draft_source"))}</a><a href="${base}/artifact/tailoring.json" target="_blank">${esc(t("app.preparation_details"))}</a></div><p class="document-note">${esc(t("app.download_the_pdf_to_attach_to_your_application"))}</p></div>
     <div class="answer-form"><div class="section-bar"><h2>${esc(t("app.your_answers"))} <small>· ${form.fields.length}</small></h2><button id="copy-answers">${esc(t("app.copy_all_answers"))}</button></div><p class="form-intro">${readonly ? t("app.saved_version") : 'Version ' + job.revision + ""}${esc(t("app.required_fields_are_marked_with"))}</p>
     ${form.fields.map((item, index) => field(item, data.answers, index, readonly)).join('')}
     <details class="additional-motivation"><summary>${esc(t("app.additional_notes"))}</summary><label class="field"><span class="field-heading">${esc(t("app.a_short_introduction_you_can_reuse"))}</span><textarea id="motivation" rows="6" ${readonly ? 'readonly' : ''}>${esc(data.motivation)}</textarea><small>${data.submission.mode === 'email' ? t("app.the_email_draft_uses_your_main_message_above") : t("app.use_this_if_the_employer_asks_for_a")}</small></label></details>
@@ -161,7 +171,7 @@ function dossier(job, data) {
     <div class="delivery-card"><h3>${esc(t("app.when_you_re_ready_to_apply"))}</h3>${data.submission.mode === 'email' ? `<p>${esc(t("app.open_the_draft_in_your_email_app_check"))}</p><p class="recipient">${esc(data.submission.recipient || '')}</p><a class="button-link" href="${base}/email">${esc(t("app.download_email_draft"))}</a>` : `<p>${esc(t("app.copy_your_answers_download_your_cv_and_complete"))}</p>${job.url?`<a class="button-link" href="${esc(job.url)}" target="_blank" rel="noopener noreferrer">${esc(t("app.open_employer_application"))}</a>`:`<p>${esc(t("app.add_the_employer_s_link_to_open_the"))}</p>`}`}<p class="footnote">${esc(t("app.once_you_ve_sent_it_choose_mark_as"))}</p></div></div></div>`;
 }
 function tracking(job) {
-  const sent = job.status === 'SUBMITTED', canRecord = ['REVIEWED','APPROVED','MANUAL_ACTION_REQUIRED','SUBMISSION_UNCERTAIN'].includes(job.status);
+  const sent = job.status === 'SUBMITTED', preparing = ['queued','preparing'].includes(job.preparation?.state), canRecord = !preparing && ['REVIEWED','APPROVED','MANUAL_ACTION_REQUIRED','SUBMISSION_UNCERTAIN'].includes(job.status);
   const events = job.history.events, receipts = events.filter(event => ['MANUAL_CONFIRMATION','SUBMITTED'].includes(event.action));
   const names = {DOSSIER_SAVED:t("app.materials_saved"), REVIEW:t("app.marked_ready_to_apply"), MANUAL_CONFIRMATION:t("app.marked_as_applied"), SUBMITTED:t("app.application_recorded"), AUDIT:t("app.details_checked"), SKIP:t("app.application_dismissed"), LATER:t("app.application_set_aside"), GO:t("app.review_recorded"), SUBMITTING:t("app.submission_attempt_recorded"), SUBMISSION_UNCERTAIN:t("app.submission_needs_checking")};
   return `<div class="tracking-layout"><section><h2>${esc(t("app.application_progress"))}</h2><div class="tracking-note"><div class="notice ${sent ? 'good' : ''}"><strong>${esc(sent ? t("app.applied") : canRecord ? t("app.ready_to_apply") : t("app.drafting"))}</strong><p>${sent ? t("app.you_ve_recorded_this_application_as_sent") : canRecord ? t("app.after_sending_the_application_yourself_choose_mark_as") : t("app.review_your_materials_and_complete_any_missing_answers")}</p></div>
@@ -171,17 +181,31 @@ function tracking(job) {
     <section><h2>${esc(t("app.activity"))}</h2><ol class="timeline">${events.map(event => { const details = eventDetails(event); return `<li><span class="timeline-dot" aria-hidden="true"></span><div><strong>${esc(names[event.action] || t("app.application_updated"))}</strong><time datetime="${esc(event.created_at)}">${date(event.created_at)}</time>${details.revision ? `<p>${esc(t("app.version"))} ${esc(details.revision)}</p>` : ''}${details.confirmation ? `<p>${esc(details.confirmation)}</p>` : ''}</div></li>`; }).join('') || `<li>${esc(t("app.no_activity_yet"))}</li>`}</ol>
     <details class="history-versions"><summary>${esc(t("app.saved_versions"))}${job.history.versions.length})</summary><ul>${job.history.versions.map(version => `<li>${esc(t("app.version"))} ${esc(version.revision)} · ${date(version.created_at)}</li>`).join('')}</ul></details><details><summary>${esc(t("app.activity_details"))}</summary><pre>${esc(JSON.stringify(job.history, null, 2))}</pre></details></section></div>`;
 }
+function preparationActions(job, preparing) {
+  const locked = lockedStatuses.includes(job.status), hasAI = Boolean(job.dossier && job.audit.company_context);
+  const name = window.WorkspaceUI?.connection?.connected ? window.WorkspaceUI.connection.name : 'AI';
+  const prepare = `<button data-prepare-job="${esc(job.id)}" ${preparing?'disabled':''}>${esc(t(job.dossier?'prepare.new_version':'prepare.with_provider',{name}))}</button>`;
+  const main = locked ? '' : preparing ? `<button class="primary" disabled>${esc(t('app.preparing'))}</button>` : hasAI && job.preparation?.state!=='failed' ? `<button data-review-materials>${esc(t('prepare.review'))}</button>` : prepare.replace('<button ', '<button class="primary" ');
+  return `${main}<details class="preparation-alternatives"><summary>${esc(t('prepare.other_ways'))}</summary>${hasAI && !locked ? prepare : ''}<button data-local-tools="${esc(job.id)}" ${preparing?'disabled':''}>${esc(t('prepare.manual'))}</button></details>`;
+}
+function preparationPanel(job) {
+  const preparation = job.preparation;
+  if (!preparation || !['queued','preparing','failed'].includes(preparation.state)) return '';
+  const failed = preparation.state === 'failed';
+  return `<section class="notice ${failed ? 'preparation-error' : 'preparation-progress'}" role="${failed ? 'alert' : 'status'}"><strong>${esc(t(failed ? 'prepare.failed' : 'prepare.progress'))}</strong><p>${esc(preparation.message)}</p><p>${esc(t(failed ? 'prepare.failure_help' : 'prepare.progress_help'))}</p></section>`;
+}
 function render() {
-  const job = current, data = job.dossier, stage = stageFor(job), canReview = data && !job.problems.length && ['APPLICATION_READY','NEEDS_INPUT','SKIPPED','VERIFIED'].includes(job.status), canRecord = ['REVIEWED','APPROVED','MANUAL_ACTION_REQUIRED','SUBMISSION_UNCERTAIN'].includes(job.status);
-  $('#review').innerHTML = `<a class="back" href="/" id="back">${esc(t("app.all_jobs"))}</a><div class="review-top"><div class="company-heading">${mark(job.company)}<div><h1 id="job-title" tabindex="-1">${esc(job.company)}</h1><p class="review-role">${esc(job.audit.title || job.role)}</p>${status(displayStatus(job))}</div></div><div class="review-actions"><button data-edit-opportunity="${esc(job.id)}" ${lockedStatuses.includes(job.status)?'disabled':''}>${esc(t("app.edit_job"))}</button><button data-local-tools="${esc(job.id)}">${esc(t("app.prepare_application"))}</button>${job.url?`<a class="button-link" href="${esc(job.url)}" target="_blank" rel="noopener noreferrer">${esc(t("app.view_listing"))}</a>`:''}${canReview ? `<button class="primary" id="review-dossier">${esc(t("app.mark_ready_to_apply"))}</button>` : ''}${canRecord ? `<button class="primary" id="record-receipt">${esc(t("app.mark_as_applied"))}</button>` : ''}<span class="action-hint">${job.status === 'SUBMITTED' ? t("app.recorded_as_applied") : canRecord ? t("app.use_this_after_sending_the_application_yourself") : canReview ? t("app.this_records_your_review_you_still_send_the") : t("app.check_the_materials_for_missing_details")}</span></div></div>
+  const job = current, data = job.dossier, stage = stageFor(job), preparing = ['queued','preparing'].includes(job.preparation?.state), canReview = !preparing && data && !job.problems.length && ['APPLICATION_READY','NEEDS_INPUT','SKIPPED','VERIFIED'].includes(job.status), canRecord = !preparing && ['REVIEWED','APPROVED','MANUAL_ACTION_REQUIRED','SUBMISSION_UNCERTAIN'].includes(job.status);
+  $('#review').innerHTML = `<a class="back" href="/" id="back">${esc(t("app.all_jobs"))}</a><div class="review-top"><div class="company-heading">${mark(job.company)}<div><h1 id="job-title" tabindex="-1">${esc(job.company)}</h1><p class="review-role">${esc(job.audit.title || job.role)}</p>${status(displayStatus(job))}</div></div><div class="review-actions"><button data-edit-opportunity="${esc(job.id)}" ${lockedStatuses.includes(job.status)?'disabled':''}>${esc(t("app.edit_job"))}</button>${preparationActions(job,preparing)}${job.url?`<a class="button-link" href="${esc(job.url)}" target="_blank" rel="noopener noreferrer">${esc(t("app.view_listing"))}</a>`:''}${canReview ? `<button class="primary" id="review-dossier">${esc(t("app.mark_ready_to_apply"))}</button>` : ''}${canRecord ? `<button class="primary" id="record-receipt">${esc(t("app.mark_as_applied"))}</button>` : ''}<span class="action-hint">${job.status === 'SUBMITTED' ? t("app.recorded_as_applied") : canRecord ? t("app.use_this_after_sending_the_application_yourself") : canReview ? t("app.this_records_your_review_you_still_send_the") : t("app.check_the_materials_for_missing_details")}</span></div></div>
     <div class="review-secondary"><div class="review-stage" aria-label="Step ${stage} of 3">${[t("app.draft"),t("app.apply"),t("app.track")].map((text, index) => `<span class="${stage === index + 1 ? 'current-step' : ''}"><span class="step-index" aria-hidden="true">${index + 1}</span>${text}</span>`).join('')}</div><div class="secondary-actions"><button class="text-button" id="later" ${lockedStatuses.includes(job.status) ? 'disabled' : ''}>${esc(t("app.set_aside"))}</button><button class="text-button" id="skip" ${lockedStatuses.includes(job.status) ? 'disabled' : ''}>${esc(t("app.dismiss"))}</button></div></div>
     <div class="review-tabs" role="tablist" aria-label="${esc(t("app.application_sections"))}"><button role="tab" id="tab-offre" aria-controls="panel-offre" data-tab="offre">${esc(t("app.job_2"))}</button><button role="tab" id="tab-dossier" aria-controls="panel-dossier" data-tab="dossier">${esc(t("app.materials"))}${data ? '' : ` <small>${esc(t("app.draft_2"))}</small>`}</button><button role="tab" id="tab-suivi" aria-controls="panel-suivi" data-tab="suivi">${esc(t("app.activity"))}</button></div>
-    <section id="panel-offre" role="tabpanel" aria-labelledby="tab-offre">${job.audit.pending_retrieval?`<p class="notice">${esc(t("app.link_saved_choose_edit_job_to_get_its"))}</p>`:''}${job.audit.origin==='portable_ai'?`<p class="notice">${esc(t("app.imported_from_an_external_ai_confirm_that_the"))}</p>`:''}${offer(job)}${job.audit.external_analysis?`<section class="notice"><h2>${esc(t("app.imported_analysis_not_verified"))}</h2><pre class="portable-result">${esc(JSON.stringify(job.audit.external_analysis,null,2))}</pre></section>`:''}</section><section id="panel-dossier" role="tabpanel" aria-labelledby="tab-dossier">${data ? dossier(job, data) : `<div class="empty-state"><strong>${esc(t("app.start_your_application_materials"))}</strong><p>${esc(t("app.prepare_a_draft_from_your_profile_then_check"))}</p><button id="see-offer">${esc(t("app.review_job_details"))}</button></div>`}</section><section id="panel-suivi" role="tabpanel" aria-labelledby="tab-suivi">${tracking(job)}</section>`;
+    ${preparationPanel(job)}<section id="panel-offre" role="tabpanel" aria-labelledby="tab-offre">${job.audit.pending_retrieval?`<p class="notice">${esc(t("app.link_saved_choose_edit_job_to_get_its"))}</p>`:''}${job.audit.origin==='portable_ai'?`<p class="notice">${esc(t("app.imported_from_an_external_ai_confirm_that_the"))}</p>`:''}${offer(job)}${job.audit.external_analysis?`<section class="notice"><h2>${esc(t("app.imported_analysis_not_verified"))}</h2><pre class="portable-result">${esc(JSON.stringify(job.audit.external_analysis,null,2))}</pre></section>`:''}</section><section id="panel-dossier" role="tabpanel" aria-labelledby="tab-dossier">${data ? dossier(job, data) : preparing ? `<p class="footnote">${esc(t("prepare.waiting"))}</p>` : `<div class="empty-state"><strong>${esc(t("app.start_your_application_materials"))}</strong><p>${esc(t("app.prepare_a_draft_from_your_profile_then_check"))}</p><button id="see-offer">${esc(t("app.review_job_details"))}</button></div>`}</section><section id="panel-suivi" role="tabpanel" aria-labelledby="tab-suivi">${tracking(job)}</section>`;
   $('#back').onclick = event => { if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return; event.preventDefault(); home(); };
   $('#later').onclick = () => decide('LATER'); $('#skip').onclick = () => decide('SKIP');
   if ($('#review-dossier')) $('#review-dossier').onclick = () => decide('REVIEW');
   if ($('#record-receipt')) $('#record-receipt').onclick = recordSent;
   if ($('#see-offer')) $('#see-offer').onclick = () => selectTab('offre');
+  if ($('[data-review-materials]')) $('[data-review-materials]').onclick=()=>{selectTab('dossier');$('#panel-dossier').scrollIntoView({block:'start'});};
   document.querySelectorAll('[data-tab]').forEach(button => {
     button.onclick = () => selectTab(button.dataset.tab);
     button.onkeydown = event => { const tabs = ['offre','dossier','suivi'], index = tabs.indexOf(button.dataset.tab); let next;
@@ -205,6 +229,7 @@ function render() {
     await updateJob('/checks', {revision:current.revision, eligibility_checked:true, form_checked:true}, t("app.checks_saved"));
   };
   selectTab(currentTab); updateEditingState();
+  if (preparing) $('#review').querySelectorAll('input,textarea,select,[data-assist],#save,[data-edit-opportunity]').forEach(node=>node.disabled=true);
 }
 function selectTab(tab) {
   currentTab = tab;

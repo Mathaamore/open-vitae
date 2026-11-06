@@ -1,6 +1,6 @@
 (() => {
   const el = id => document.getElementById(id);
-  let bootstrap, profile = {}, provider = 'chatgpt', step = 0, started = false, readyResolve, connectionTimer, searchBusy = false, chatBusy = false, preparationTimer, draftTimer;
+  let bootstrap, profile = {}, provider = 'chatgpt', step = 0, started = false, readyResolve, connectionTimer, connectionChecking = false, connectionGeneration = 0, searchBusy = false, chatBusy = false, preparationTimer, draftTimer;
   window.profileDirty = false;
   const gateMessage = (text = '', error = false) => { el('gate-message').textContent = text; el('gate-message').hidden = !text; el('gate-message').classList.toggle('error', error); };
   function providerChoice(value) {
@@ -10,15 +10,30 @@
     el('provider-mode').textContent = item?.mode || t("workspace.chatgpt_account");
     el('provider-description').textContent = item?.description || t("workspace.sign_in_through_your_browser_your_account_s");
     el('provider-key-label').hidden = provider === 'chatgpt'; el('provider-key').value = '';
-    el('connect-provider').textContent = provider === 'chatgpt' ? "Sign in with ChatGPT ↗" : 'Connecter ' + (item?.name || provider);
+    clearInterval(connectionTimer); connectionGeneration++;
+    el('connection-progress').hidden = true; el('connection-retry').hidden = true; gateMessage('');
+    el('connect-provider').textContent = provider === 'chatgpt' ? t('screen.sign_in_with_chatgpt') : t('ux.connect_named', {name:item?.name || provider});
     el('connect-provider').hidden = false; el('connect-provider').disabled = false;
     el('oauth-continue').hidden = true; el('connection-check').hidden = true;
   }
+  function closeConnection() {
+    clearInterval(connectionTimer); connectionGeneration++;
+    el('provider-key').value = '';
+    if (el('connection-dialog').open) el('connection-dialog').close();
+    el('connection-step').append(el('optional-ai'));
+    el('welcome').insertBefore(el('gate-message'), el('connection-step'));
+  }
   function showConnection(returnable = false) {
-    el('optional-ai').open=returnable; clearInterval(connectionTimer); el('workspace-root').hidden = true; el('welcome').hidden = false;
-    el('connection-step').hidden = false; el('profile-step').hidden = true;
-    el('return-workspace').hidden = !returnable; providerChoice(bootstrap?.connection?.provider || 'chatgpt');
-    el('connection-title').focus();
+    providerChoice(bootstrap?.connection?.provider || 'chatgpt');
+    el('optional-ai').open = returnable;
+    if (returnable) {
+      el('connection-dialog-body').append(el('optional-ai'), el('gate-message'));
+      el('connection-dialog').showModal();
+    } else {
+      el('workspace-root').hidden = true; el('welcome').hidden = false;
+      el('connection-step').hidden = false; el('profile-step').hidden = true;
+      el('connection-title').focus();
+    }
   }
   function fillProfile(value) {
     const form = el('profile-form');
@@ -37,8 +52,8 @@
   }
   function editProfile() {
     if (typeof dirty !== 'undefined' && dirty) { message(t("workspace.save_or_discard_your_application_changes_before_editing"), true); return; }
-    el('workspace-root').hidden = true; el('welcome').hidden = false; el('connection-step').hidden = true; el('profile-step').hidden = false;
-    el('profile-cancel').hidden = !bootstrap?.onboarded; fillProfile(bootstrap?.onboarded ? profile : bootstrap?.onboarding?.fields || profile); profileStep(bootstrap?.onboarded ? 0 : bootstrap?.onboarding?.step || 0); gateMessage(''); window.scrollTo(0,0);
+    el('workspace-root').hidden = true; el('welcome').hidden = false; el('connection-step').hidden = true; el('profile-step').hidden = false; el('welcome').scrollTop=0;
+    el('profile-cancel').hidden = !bootstrap?.onboarded; fillProfile(bootstrap?.onboarded ? profile : bootstrap?.onboarding?.fields || profile); profileStep(bootstrap?.onboarded ? 0 : bootstrap?.onboarding?.step || 0); gateMessage(''); el('main').scrollTop=0;
   }
   function activate() {
     el('provider-key').value = ''; clearInterval(connectionTimer); gateMessage('');
@@ -46,28 +61,57 @@
     if (readyResolve) { const resolve = readyResolve; readyResolve = null; resolve(true); }
     else if (started) start();
   }
-  async function checkConnection() {
+  async function checkConnection(generation = connectionGeneration) {
+    if (connectionChecking) return;
+    connectionChecking = true;
     try {
       const status = await api('/api/providers');
-      if (!status.connected) { gateMessage(status.error || t("workspace.finish_signing_in_through_your_browser_then_check")); return; }
+      if (generation !== connectionGeneration) return;
+      if (!status.connected) {
+        if (status.error) { clearInterval(connectionTimer); gateMessage(status.error, true); el('connection-retry').hidden = false; }
+        return;
+      }
       clearInterval(connectionTimer); bootstrap = await api('/api/bootstrap'); profile = bootstrap.profile || {};
-      if (bootstrap.onboarded) activate(); else editProfile();
-    } catch (error) { gateMessage(error.message, true); }
+      const inWorkspace = el('connection-dialog').open;
+      closeConnection(); updateConnection(status);
+      if (inWorkspace) { await loadSettings(); message(t('ux.connected', {name:status.name})); }
+      else if (bootstrap.onboarded) activate(); else editProfile();
+    } catch (error) { if (generation === connectionGeneration) { gateMessage(error.message, true); el('connection-retry').hidden = false; } }
+    finally { connectionChecking = false; }
   }
   async function connect() {
-    el('connect-provider').disabled = true; gateMessage(t("workspace.checking_connection"));
+    clearInterval(connectionTimer);
+    const generation = ++connectionGeneration;
+    el('connect-provider').disabled = true; gateMessage('');
+    el('connection-progress').hidden = false; el('connection-progress').textContent = t('ux.connecting');
+    el('connection-retry').hidden = true; el('oauth-continue').hidden = true;
     try {
       const result = await api('/api/providers/connect', {method:'POST', body:JSON.stringify({provider, key:el('provider-key').value || undefined})});
       el('provider-key').value = '';
+      if (generation !== connectionGeneration) return;
       if (result.url) {
         const url = new URL(result.url);
-        if (url.protocol !== 'https:' || !['auth.openai.com','chatgpt.com'].includes(url.hostname)) throw Error(t("workspace.the_sign_in_link_could_not_be_verified"));
+        if (url.protocol !== 'https:' || !['auth.openai.com','chatgpt.com'].includes(url.hostname) || url.username || url.password) throw Error(t('workspace.the_sign_in_link_could_not_be_verified'));
         el('oauth-continue').href = url.href; el('oauth-continue').hidden = false; el('connection-check').hidden = false; el('connect-provider').hidden = true;
-        gateMessage(t("workspace.continue_in_your_browser_then_return_here_to"));
-        let polls = 0; connectionTimer = setInterval(() => { if (++polls > 90 || el('welcome').hidden) clearInterval(connectionTimer); else checkConnection(); }, 2000);
-      } else await checkConnection();
-    } catch (error) { gateMessage(error.message, true); }
-    finally { el('connect-provider').disabled = false; }
+        el('connection-progress').textContent = t('ux.browser_ready');
+        el('oauth-continue').focus();
+        let polls = 0;
+        connectionTimer = setInterval(() => {
+          if (++polls > 90) {
+            clearInterval(connectionTimer); el('connection-progress').textContent = t('ux.expired'); el('connection-retry').hidden = false;
+          } else checkConnection(generation);
+        }, 2000);
+      } else await checkConnection(generation);
+    } catch (error) { if (generation === connectionGeneration) { el('connection-progress').hidden = true; gateMessage(error.message, true); el('connection-retry').hidden = false; } }
+    finally { if (generation === connectionGeneration) el('connect-provider').disabled = false; }
+  }
+  function updateConnection(state) {
+    bootstrap.connection = state;
+    el('chat-send-label').textContent = state.connected ? t('ux.send') : t('ux.connect_ai');
+    el('chat-send').setAttribute('aria-label', state.connected ? t('screen.send_message') : t('ux.connect_ai'));
+    el('sidebar-ai-status').textContent = state.connected ? t('ux.connected', {name:state.name}) : t('ux.not_connected');
+    el('chat-connection-note').textContent = state.connected ? t('ux.chat_connected', {name:state.name}) : t('ux.chat_offline');
+    el('provider-disconnect').hidden = !state.connected;
   }
   function queueDraft() {
     if (bootstrap?.onboarded) return;
@@ -105,8 +149,8 @@
     ['explore','dashboard','settings-screen','tools-screen'].forEach(id => el(id).hidden = id !== screen);
     el('review').hidden = true;
     document.querySelectorAll('[data-screen]').forEach(button => { if (button.dataset.screen === screen) button.setAttribute('aria-current','page'); else button.removeAttribute('aria-current'); });
-    el('screen-title').textContent = {explore:t("workspace.discover"),dashboard:t("app.applications"),'settings-screen':t("workspace.ai_and_usage"),'tools-screen':t("workspace.use_your_own_ai")}[screen];
-    message(''); if(screen==='tools-screen')window.LocalTools?.enter(); if (screen === 'settings-screen') loadSettings(); window.scrollTo(0,0); return true;
+    el('screen-title').textContent = {explore:t("workspace.discover"),dashboard:t("app.applications"),'settings-screen':t("workspace.ai_and_usage"),'tools-screen':t('ux.ai_imports')}[screen];
+    message(''); if(screen==='tools-screen')window.LocalTools?.enter(); if (screen === 'settings-screen') {settingsTab('account');loadSettings();} el('main').scrollTop=0; return true;
   }
   function note(text, role) { const node = document.createElement('div'); node.className = 'chat-message ' + role; const label = document.createElement('span'); label.className='sr-only';label.textContent=role==='user'?"You: ":"Assistant: "; const body=document.createElement('p');body.textContent=text;node.append(label,body);el('chat-log').append(node); }
   async function loadChat() {
@@ -114,7 +158,7 @@
     el('chat-log').scrollTop = el('chat-log').scrollHeight;
   }
   async function sendChat(event) {
-    event.preventDefault(); if(!bootstrap.connection.connected){window.LocalTools.open('profile_analysis');message(t("workspace.create_a_prompt_for_your_own_ai_or"));return;} const text=el('chat-input').value.trim();if (!text || chatBusy) return;
+    event.preventDefault(); if(!bootstrap.connection.connected){showConnection(true);return;} const text=el('chat-input').value.trim();if (!text || chatBusy) return;
     chatBusy=true;el('chat-send').disabled=true;el('chat-input').value='';el('chat-empty').hidden=true;note(text,'user');
     const pending=document.createElement('p');pending.className='chat-pending';pending.textContent=t("workspace.working_on_your_request");pending.setAttribute('role','status');el('chat-log').append(pending);
     try { const result=await api('/api/chat',{method:'POST',body:JSON.stringify({text})});note(result.text,'assistant');if(result.offers)offers({offers:result.offers});if(result.proposed_preferences)proposePreferences(result.proposed_preferences,result.profile_revision); }
@@ -124,7 +168,7 @@
   function proposePreferences(patch, revision) {
     const box=document.createElement('div');box.className='preference-proposal';
     const title=document.createElement('strong');title.textContent=t("workspace.suggested_preferences");box.append(title);
-    const labels={roles:'Postes',locations:'Lieux',remote:t("app.work_arrangement"),expectations:'Attentes'};
+    const labels={roles:'Roles',locations:'Locations',remote:t("app.work_arrangement"),expectations:'Preferences'};
     for(const [key,value] of Object.entries(patch)){const line=document.createElement('p');line.textContent=(labels[key]||key)+' : '+(Array.isArray(value)?value.join(', '):({remote:t("workspace.remote"),hybrid:t("workspace.hybrid"),office:t("workspace.on_site"),flexible:t("workspace.flexible")}[value]||value));box.append(line);}
     const button=document.createElement('button');button.textContent=t("workspace.apply_preferences");box.append(button);
     button.onclick=async()=>{button.disabled=true;try{profile=await api('/api/profile/preferences',{method:'POST',body:JSON.stringify({preferences:patch,revision})});bootstrap.profile=profile;updateProfileDisplay();await loadOffers();button.textContent=t("workspace.preferences_updated");}catch(error){message(error.message,true);button.disabled=false;}};
@@ -143,7 +187,7 @@
   }
   async function loadOffers(){offers(await api('/api/recommendations'));}
   async function search() {
-    if(searchBusy || chatBusy)return;searchBusy=true;['first-search','search-offers','refresh-offers'].forEach(id=>el(id).disabled=true);
+    if(searchBusy || chatBusy)return;discoveryPane('jobs');searchBusy=true;['first-search','search-offers','refresh-offers'].forEach(id=>el(id).disabled=true);
     el('recommendation-note').textContent=t("workspace.checking_job_sources");
     el('cancel-search').hidden=false; el('search-progress').hidden=false; el('search-progress').setAttribute('aria-busy','true');
     const poll=setInterval(async()=>{try{const state=await api('/api/discovery/status');if(state.state==='running'){el('search-progress-text').textContent=`${state.source} · ${state.completed} sources checked · ${state.imported} jobs found`;await loadOffers();}}catch{}},1500);
@@ -152,7 +196,9 @@
     finally{clearInterval(poll);el('cancel-search').hidden=true;el('search-progress').hidden=true;el('search-progress').setAttribute('aria-busy','false');searchBusy=false;['first-search','search-offers','refresh-offers'].forEach(id=>el(id).disabled=false);}
   }
   async function interest(button) {
-    const identity=button.dataset.id,decision=button.dataset.interest;button.disabled=true;
+    const identity=button.dataset.id,decision=button.dataset.interest;
+    if(decision==='accept'){button.dataset.prepareJob=identity;await prepareApplication(button);return;}
+    button.disabled=true;
     const reason=[...document.querySelectorAll('[data-reason]')].find(node=>node.dataset.reason===identity)?.value||'';
     try {await api('/api/jobs/'+encodeURIComponent(identity)+'/interest',{method:'POST',body:JSON.stringify({decision,reason})});await Promise.all([loadOffers(),refreshJobs()]);message(decision==='later'?t("workspace.job_saved"):decision==='accept'?t("workspace.application_started_find_your_draft_in_applications"):t("workspace.job_dismissed_your_feedback_helps_refine_future_suggestions"));if(decision==='reject'){
       const undo=document.createElement('button');undo.textContent=t("workspace.undo");undo.className='undo-button';
@@ -161,28 +207,73 @@
     }pollPreparations();}
     catch(error){message(error.message,true);button.disabled=false;}
   }
+  async function prepareApplication(button) {
+    if (dirty) { message(t('workspace.save_or_discard_your_changes_before_leaving_this'), true); return; }
+    button.disabled = true;
+    try {
+      const state = await api('/api/providers'); updateConnection(state);
+      if (!state.connected) { showConnection(true); gateMessage(t('prepare.connect_help')); return; }
+      const job = await api('/api/jobs/'+encodeURIComponent(button.dataset.prepareJob));
+      await api('/api/jobs/'+encodeURIComponent(job.id)+'/prepare', {method:'POST',body:JSON.stringify({revision:job.revision,updated_at:job.updated_at})});
+      await refreshJobs();
+      if (current?.id !== job.id) { go('dashboard');await window.open(job.id); }
+      current=await api('/api/jobs/'+encodeURIComponent(job.id));currentTab='dossier';render();
+      pollPreparations();
+    } catch(error) { message(error.message,true); }
+    finally { button.disabled=false; }
+  }
   function pollPreparations(){
     clearInterval(preparationTimer);
     if(!jobs.some(job=>['queued','preparing'].includes(job.preparation?.state)))return;
-    preparationTimer=setInterval(async()=>{if(document.hidden)return;try{await refreshJobs();if(!jobs.some(job=>['queued','preparing'].includes(job.preparation?.state))){clearInterval(preparationTimer);await loadUsage();message(t("workspace.preparation_finished_review_your_materials_in_applications"));}}catch(error){clearInterval(preparationTimer);message(error.message,true);}},4000);
+    preparationTimer=setInterval(async()=>{
+      if(document.hidden)return;
+      try {
+        await refreshJobs();
+        if(current && !dirty) {
+          const updated=jobs.find(job=>job.id===current.id);
+          if(updated && (updated.preparation?.updated_at!==current.preparation?.updated_at || updated.revision!==current.revision)) {
+            const wasPreparing=['queued','preparing'].includes(current.preparation?.state);
+            current=await api('/api/jobs/'+encodeURIComponent(current.id));
+            if(wasPreparing && current.preparation?.state==='ready')currentTab='dossier';
+            render();
+          }
+        }
+        if(!jobs.some(job=>['queued','preparing'].includes(job.preparation?.state))){clearInterval(preparationTimer);await loadUsage();}
+      } catch(error){clearInterval(preparationTimer);message(error.message,true);}
+    },1500);
   }
   async function loadUsage(){try{const data=await api('/api/usage');el('daily-limit').value=data.limit;const tokens=data.runs.map(run=>run.usage?.totalTokens ?? run.usage?.totalTokenCount ?? (typeof run.usage?.input_tokens==='number'&&typeof run.usage?.output_tokens==='number'?run.usage.input_tokens+run.usage.output_tokens:null)).filter(value=>typeof value==='number');
       el('usage-detail').textContent=`${data.requests} requests today. ${tokens.length?tokens.reduce((sum,value)=>sum+value,0).toLocaleString('en')+t("workspace.tokens_reported_by_your_ai_service"):t("workspace.your_ai_service_hasn_t_reported_token_usage")} The daily limit resets at 00:00 UTC.`;}catch(error){message(error.message,true);}}
   async function loadSettings(){
-    try{const sources=await api('/api/sources');el('source-boards').value=sources.boards.join('\n');const state=await api('/api/providers');el('connected-provider-name').textContent=state.name||t("workspace.your_ai_service");el('connected-provider-detail').textContent=state.email|| (state.provider==='chatgpt'?t("workspace.chatgpt_connected"):t("workspace.api_key_stored_in_your_system_keychain"));await loadUsage();}catch(error){message(error.message,true);}
+    try{const sources=await api('/api/sources');el('source-boards').value=sources.boards.join('\n');const state=await api('/api/providers');el('connected-provider-name').textContent=state.name||t("workspace.your_ai_service");el('connected-provider-detail').textContent=state.connected ? (state.email || (state.provider==='chatgpt'?t("workspace.chatgpt_connected"):t("workspace.api_key_stored_in_your_system_keychain"))) : t('ux.disconnected_detail'); updateConnection(state);await loadUsage();}catch(error){message(error.message,true);}
   }
   function updateProfileDisplay(){
     el('profile-name').textContent=profile.name||t("workspace.your_profile");el('profile-initial').textContent=(profile.name||'C').slice(0,1).toUpperCase();
     el('criteria-summary').textContent=[...(profile.roles||[]),...(profile.locations||[]),{remote:t("workspace.remote"),hybrid:t("workspace.hybrid"),office:t("workspace.on_site"),flexible:t("workspace.flexible_work_arrangement")}[profile.remote]].filter(Boolean).join(' · ');
+    el('criteria-summary').title=el('criteria-summary').textContent;
   }
   async function start(){
-    started=true;updateProfileDisplay();
+    started=true;updateProfileDisplay();updateConnection(bootstrap.connection);
     await Promise.all([loadOffers(),loadChat(),loadUsage()]);pollPreparations();go('explore');
+    if (!bootstrap.local_mode) { try { updateConnection(await api('/api/providers')); } catch { updateConnection({connected:false}); } }
+  }
+  function discoveryPane(value) {
+    el('explore').dataset.pane = value;
+    document.querySelectorAll('[data-discovery-pane]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.discoveryPane === value)));
+  }
+  function settingsTab(value) {
+    document.querySelectorAll('[data-settings-tab]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.settingsTab === value)));
+    document.querySelectorAll('[data-settings-panel]').forEach(panel => panel.hidden = panel.dataset.settingsPanel !== value);
   }
   function bind(){
-    document.querySelectorAll('[data-provider]').forEach(button=>button.onclick=()=>providerChoice(button.dataset.provider));el('connect-provider').onclick=connect;el('connection-check').onclick=checkConnection;
+    document.querySelectorAll('[data-discovery-pane]').forEach(button => button.onclick = () => discoveryPane(button.dataset.discoveryPane));
+    document.querySelectorAll('[data-settings-tab]').forEach(button => button.onclick = () => settingsTab(button.dataset.settingsTab));
+    document.querySelectorAll('[data-provider]').forEach(button=>button.onclick=()=>providerChoice(button.dataset.provider));el('connect-provider').onclick=connect;el('connection-check').onclick=()=>checkConnection();
+    el('connection-retry').onclick=connect; el('connection-close').onclick=closeConnection;
+    el('connection-dialog').addEventListener('cancel', event=>{event.preventDefault();closeConnection();});
+    el('oauth-continue').onclick=()=>{el('connection-progress').textContent=t('ux.waiting');};
     el('continue-local').onclick=async()=>{try{await api('/api/providers/local',{method:'POST',body:'{}'});bootstrap=await api('/api/bootstrap');profile=bootstrap.profile||{};if(bootstrap.onboarded)activate();else editProfile();}catch(error){gateMessage(error.message,true);}};
-    el('return-workspace').onclick=()=>activate();el('cv-upload').onchange=()=>importCV();
+    el('cv-upload').onchange=()=>importCV();
     const drop=document.querySelector('.cv-drop');
     drop.ondragover=event=>{event.preventDefault();drop.classList.add('drag-over');};
     drop.ondragleave=()=>drop.classList.remove('drag-over');
@@ -192,14 +283,14 @@
     el('profile-next').onclick=()=>{const visible=document.querySelector(`[data-profile-step="${step}"]`);if([...visible.querySelectorAll('input,textarea,select')].every(field=>field.reportValidity()))profileStep(step+1);};
     el('profile-previous').onclick=()=>profileStep(step-1);el('profile-cancel').onclick=()=>{window.profileDirty=false;fillProfile(profile);activate();};
     document.querySelectorAll('[data-screen]').forEach(button=>button.onclick=()=>go(button.dataset.screen));el('profile-open').onclick=editProfile;el('settings-profile').onclick=editProfile;
-    el('provider-change').onclick=()=>showConnection(true);el('provider-disconnect').onclick=async()=>{try{await api('/api/providers/disconnect',{method:'POST',body:'{}'});bootstrap.connection={connected:false,name:t("workspace.ai_not_connected")};updateProfileDisplay();activate();}catch(error){message(error.message,true);}};
+    el('provider-change').onclick=()=>showConnection(true);el('provider-disconnect').onclick=async()=>{try{await api('/api/providers/disconnect',{method:'POST',body:'{}'});bootstrap.connection={connected:false,name:t("workspace.ai_not_connected")};updateProfileDisplay();updateConnection(bootstrap.connection);await loadSettings();}catch(error){message(error.message,true);}};
     el('save-source-boards').onclick=async()=>{try{const boards=el('source-boards').value.split('\n').map(value=>value.trim()).filter(Boolean);await api('/api/sources',{method:'PUT',body:JSON.stringify({boards})});message(t("workspace.sources_saved_they_ll_be_included_in_your"));}catch(error){message(error.message,true);}};
     el('save-daily-limit').onclick=async()=>{try{await api('/api/usage',{method:'PUT',body:JSON.stringify({limit:Number(el('daily-limit').value)})});await loadUsage();message(t("workspace.daily_limit_saved"));}catch(error){message(error.message,true);}};
     el('chat-form').onsubmit=sendChat;['first-search','search-offers','refresh-offers'].forEach(id=>el(id).onclick=search);
     el('recommendations-list').onclick=event=>{const button=event.target.closest('[data-interest]');if(button)interest(button);};
-    document.addEventListener('click',event=>{const button=event.target.closest('[data-retry-preparation]');if(button){button.dataset.id=button.dataset.retryPreparation;button.dataset.interest='accept';interest(button);}});
+    document.addEventListener('click',event=>{const prepare=event.target.closest('[data-prepare-job]');if(prepare){prepareApplication(prepare);return;}const button=event.target.closest('[data-retry-preparation]');if(button){button.dataset.prepareJob=button.dataset.retryPreparation;prepareApplication(button);}});
   }
   async function boot(){bind();bootstrap=await api('/api/bootstrap');profile=bootstrap.profile||{};if(bootstrap.onboarded){el('welcome').hidden=true;el('workspace-root').hidden=false;return true;}
     const pending=new Promise(resolve=>readyResolve=resolve);if(bootstrap.connection.connected)editProfile();else{showConnection();if(bootstrap.connection.error)gateMessage(bootstrap.connection.error,true);}return pending;}
-  window.WorkspaceUI={boot,start,go,openSettings:()=>go('settings-screen'),showConnection,editProfile};
+  window.WorkspaceUI={get connection(){return bootstrap?.connection;},boot,start,go,openSettings:()=>go('settings-screen'),showConnection,editProfile};
 })();

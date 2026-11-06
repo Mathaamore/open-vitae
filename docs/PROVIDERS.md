@@ -1,6 +1,6 @@
 # Providers
 
-Connect one provider before using the workspace. Authentication and inference are distinct: a successful login/key check does not guarantee model entitlement or remaining quota.
+AI is optional. Connect one provider when you want integrated chat or writing assistance. Authentication and inference are distinct: a successful login/key check does not guarantee model entitlement or remaining quota.
 
 ## ChatGPT
 
@@ -9,6 +9,8 @@ Uses the official Codex app-server protocol and browser sign-in. The Mac build b
 Inference uses an ephemeral read-only session with tools and approval requests disabled. A small catalog model is preferred when present; otherwise the account default is used with low reasoning when supported. Context is bounded and turns time out, but app-server does not provide this integration with a strict output-token cap.
 
 Before public binary distribution, review [Sign in with ChatGPT](https://developers.openai.com/siwc) and [Codex app-server](https://learn.chatgpt.com/docs/app-server) requirements and register the application's client where required.
+
+The connection panel stays over the workspace. Choose ChatGPT, request a sign-in link, open it in the system browser, and finish the official flow. The app checks for completion and offers a fresh attempt on failure or timeout. Returning to the app does not submit a model request. On reopening, the app checks the saved connection unless local mode was explicitly selected. A connection indicator confirms authentication, not remaining quota or successful inference.
 
 ## Claude and Gemini
 

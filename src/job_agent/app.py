@@ -170,7 +170,7 @@ def document(job_id: str, filename: str):
     current = store.get(job_id)
     files = (current.get('dossier') or {}).get('attachments',[])
     pdf = next((entry['path'] for entry in files if entry.get('path','').endswith('/resume.pdf')),None)
-    relative = str(Path(pdf).parent/filename) if pdf and '/local-' in pdf else f'data/dossiers/{job_id}/{filename}'
+    relative = str(Path(pdf).parent/filename) if pdf else f'data/dossiers/{job_id}/{filename}'
     return FileResponse(artifact(store.root,relative))
 
 @app.get('/api/assistant')
@@ -225,7 +225,7 @@ async def suggestion(job_id: str, request: Request):
 def bootstrap():
     cached = getattr(providers,'cached',None)
     connection = cached[2] if isinstance(cached,tuple) and len(cached)==3 and not workspace.setting('local_mode',False) else {'connected':False,'provider':workspace.setting('provider'),'name':tr('app.ai_not_connected')}
-    return {'connection': connection, 'onboarded': bool(workspace.profile()),
+    return {'connection': connection, 'local_mode': bool(workspace.setting('local_mode',False)), 'onboarded': bool(workspace.profile()),
             'profile': workspace.profile_draft(),
             'onboarding': workspace.setting('onboarding_draft'),
             'profile_analysis':workspace.setting('portable_profile_analysis'), 'providers': CATALOG, 'version': version('open-vitae')}
@@ -413,19 +413,37 @@ async def discover(request: Request):
     return {'search': status, 'offers': offers, 'feedback_count': len(workspace.feedback())}
 
 
-def run_preparation(job_id):
+def run_preparation(job_id, revision=None, updated_at=None):
     try:
-        packets.prepare(workspace, providers, job_id)
+        packets.prepare(workspace, providers, job_id, replace=revision is not None,
+                        expected_revision=revision, expected_updated_at=updated_at)
     except Exception as error:
         text = str(error) if isinstance(error, ValueError) else tr('app.preparation_didn_t_finish_your_existing_materials_are')
-        if not store.get(job_id)['revision']:
-            try:
-                portable.draft(workspace,job_id)
-                workspace.preparation(job_id,'ready',tr('app.ai_assistance_is_unavailable_an_editable_draft_is')+text[:300])
-                return
-            except Exception:
-                pass
         workspace.preparation(job_id, 'failed', text[:1000])
+
+
+@app.post('/api/jobs/{job_id}/prepare')
+async def prepare_application(job_id: str, request: Request, background: BackgroundTasks):
+    data = await payload(request)
+    current = store.get(job_id)
+    if current['status'] in LOCKED:
+        raise ValueError(tr('portable.this_application_has_a_recorded_or_uncertain_submission_2'))
+    if data.get('revision') != current['revision'] or data.get('updated_at') != current['updated_at']:
+        raise ValueError(tr('packets.your_profile_or_application_changed_during_preparation_start'))
+    if not workspace.profile():
+        raise ValueError(tr('app.complete_your_profile_before_starting_an_application'))
+    expiry = current['audit'].get('expiry')
+    if current['category'] in {'CLOSED','INELIGIBLE'} or isinstance(expiry,(int,float)) and expiry <= time.time():
+        raise ValueError(tr('app.this_job_is_closed_or_has_a_known'))
+    state = await run_in_threadpool(providers.status, fresh=True)
+    if not state.get('connected'):
+        raise ValueError(tr('prepare.connect_first'))
+    workspace.set_setting('provider',state['provider'])
+    workspace.set_setting('local_mode',False)
+    workspace.decide(job_id,'accept')
+    if workspace.queue(job_id):
+        background.add_task(preparation_worker.submit, run_preparation, job_id, current['revision'], current['updated_at'])
+    return {'preparation':workspace.preparation(job_id)}
 
 
 @app.post('/api/jobs/{job_id}/interest')

@@ -215,7 +215,11 @@ class Store:
                 problems.append(tr('store.select_exactly') + str(field['selection_count']) + tr('store.options_for') + field['label'])
         return problems
 
-    def save(self, job_id, dossier, revision, expected_updated_at=None):
+    def save(self, job_id, dossier, revision, expected_updated_at=None, audit=None):
+        if audit is not None:
+            score(audit)
+            if not audit.get('checked_at') or not audit.get('sources'):
+                raise ValueError(tr('store.audit_requires_sources_and_verification_time'))
         # Validate artifacts before opening the transaction; they are rehashed on approval and send.
         for entry in dossier.get('attachments', []):
             artifact(self.root, entry['path'])
@@ -226,7 +230,7 @@ class Store:
                 raise ValueError(tr('store.opportunity_locked_uncertain_sends_must_be_reconciled_manually'))
             if row['revision'] != revision or expected_updated_at is not None and row['updated_at'] != expected_updated_at:
                 raise ValueError(tr('store.dossier_changed_in_another_tab_reload_before_saving'))
-            if row['dossier'] == canonical(dossier) and (not row['approved_hash'] or row['approved_hash'] == self.get(job_id)['fingerprint']):
+            if audit is None and row['dossier'] == canonical(dossier) and (not row['approved_hash'] or row['approved_hash'] == self.get(job_id)['fingerprint']):
                 return
             new_revision = revision + 1
             archive = self.root / 'data/versions' / digest(job_id)[:16] / str(new_revision)
@@ -240,10 +244,11 @@ class Store:
             (archive / 'manifest.json').write_text(canonical({'dossier':dossier,'files':snapshots}))
             job = self.get(job_id)
             job['dossier'] = dossier
+            if audit is not None: job['audit'] = audit
             status = 'NEEDS_INPUT' if self.readiness(job) else 'APPLICATION_READY'
             db.execute('INSERT INTO versions VALUES(?,?,?,?)', (job_id, new_revision, canonical(dossier), now()))
-            db.execute('UPDATE jobs SET dossier=?,revision=?,status=?,approved_hash=NULL,updated_at=? WHERE id=?',
-                       (canonical(dossier), new_revision, status, now(), job_id))
+            db.execute('UPDATE jobs SET dossier=?,revision=?,status=?,approved_hash=NULL,updated_at=?,audit=? WHERE id=?',
+                       (canonical(dossier), new_revision, status, now(), canonical(job['audit']), job_id))
             self.event(db, job_id, 'DOSSIER_SAVED', {'revision': new_revision})
 
     def decision(self, job_id, choice, fingerprint):

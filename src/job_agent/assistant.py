@@ -98,8 +98,11 @@ class CodexAssistant:
                         target.put(value)
                 else:
                     if value.get('method') == 'account/login/completed':
-                        self.login_id = None
-                        self.login_error = None if value.get('params', {}).get('success') else tr('assistant.sign_in_didn_t_finish_try_connecting_again')
+                        params = value.get('params', {})
+                        # A cancelled earlier attempt must not overwrite the current sign-in.
+                        if params.get('loginId') == self.login_id:
+                            self.login_id = None
+                            self.login_error = None if params.get('success') else tr('assistant.sign_in_didn_t_finish_try_connecting_again')
                     self.events.put(value)
         finally:
             with self.lock:

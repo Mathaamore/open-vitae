@@ -26,7 +26,7 @@
   }
   async function manual(identity=null) {
     if(dirty){message(t("portable.save_or_discard_your_application_changes_before_editing"),true);return;}
-    const form=el('manual-job-form');form.reset();editing=identity;expectedUpdate=null;
+    const form=el('manual-job-form');form.reset();el('manual-details').open=Boolean(identity);editing=identity;expectedUpdate=null;
     el('manual-title').textContent=identity?t("app.edit_job"):t("portable.add_job");el('manual-status').textContent='';
     if(identity){const job=await api('/api/jobs/'+encodeURIComponent(identity));expectedUpdate=job.updated_at;for(const field of form.elements)if(field.name)field.value=job[field.name]??job.audit[field.name]??'';}
     el('manual-job-dialog').showModal();
@@ -47,7 +47,7 @@
     finally{el('manual-save').disabled=false;}
   };
   el('manual-retrieve').onclick=async()=>{
-    el('manual-retrieve').disabled=true;el('manual-status').textContent=t("portable.reading_the_job_page");
+    el('manual-details').open=true;el('manual-retrieve').disabled=true;el('manual-status').textContent=t("portable.reading_the_job_page");
     try{const form=el('manual-job-form');const result=await api('/api/opportunities/retrieve',{method:'POST',body:JSON.stringify({url:form.elements.namedItem('url').value})});for(const [key,value] of Object.entries(result))if(value&&form.elements.namedItem(key))form.elements.namedItem(key).value=value;el('manual-status').textContent=t("portable.details_found_review_them_before_saving");}
     catch(error){el('manual-status').textContent=error.message+t("portable.save_the_link_or_paste_the_description_instead");}
     finally{el('manual-retrieve').disabled=false;}

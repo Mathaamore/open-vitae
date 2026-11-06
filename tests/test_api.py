@@ -20,6 +20,31 @@ class ApiTest(unittest.TestCase):
         self.pp=patch.object(module,'providers',self.provider);self.pp.start()
         self.client=TestClient(module.app)
     def tearDown(self):self.pp.stop();self.wp.stop();self.patcher.stop();self.temp.cleanup()
+    def test_saved_job_preparation_uses_connected_ai_and_deduplicates_the_queue(self):
+        self.store.import_jobs([{'id':'one','company':'Example','role':'Engineer','url':'https://example.com/job'}])
+        self.workspace.set_setting('local_mode',True)
+        job=self.store.get('one');body={'revision':job['revision'],'updated_at':job['updated_at']}
+        headers={'X-Local-Token':module.TOKEN}
+        with patch.object(module.preparation_worker,'submit') as submit:
+            first=self.client.post('/api/jobs/one/prepare',json=body,headers=headers)
+            self.assertEqual(first.status_code,200,first.text)
+            self.assertEqual(first.json()['preparation']['state'],'queued')
+            self.assertEqual(self.client.post('/api/jobs/one/prepare',json=body,headers=headers).status_code,200)
+            self.assertEqual(submit.call_count,1)
+            submit.assert_called_once_with(module.run_preparation,'one',0,job['updated_at'])
+        self.assertFalse(self.workspace.setting('local_mode'))
+        self.assertEqual(self.workspace.setting('provider'),'chatgpt')
+        self.assertIsNone(self.store.get('one')['dossier'])
+        self.provider.status.return_value={'connected':False}
+        self.assertEqual(self.client.post('/api/jobs/one/prepare',json=body,headers=headers).status_code,409)
+
+    def test_failed_ai_preparation_is_not_reported_as_a_manual_success(self):
+        self.store.import_jobs([{'id':'one','company':'Example','role':'Engineer','url':'https://example.com/job'}])
+        with patch.object(module.packets,'prepare',side_effect=ValueError('Fictional provider failure')):
+            module.run_preparation('one',0,self.store.get('one')['updated_at'])
+        self.assertEqual(self.workspace.preparation('one')['state'],'failed')
+        self.assertIsNone(self.store.get('one')['dossier'])
+
     def test_local_read(self):
         response=self.client.get('/api/jobs');self.assertEqual(response.status_code,200);self.assertEqual(response.json(),[])
         self.assertEqual(response.headers['cache-control'],'no-store')
