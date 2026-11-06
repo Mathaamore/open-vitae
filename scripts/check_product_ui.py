@@ -34,7 +34,13 @@ with tempfile.TemporaryDirectory() as tmp:
             page.locator('#cv-upload').set_input_files({'name':'resume.txt','mimeType':'text/plain','buffer':b'2024-2026 Engineer at Example. Built production APIs with a product team.'})
             expect(page.locator('#cv-import-status')).to_contain_text('caractères extraits')
             page.screenshot(path=str(out/'product-onboarding.png'))
-            page.locator('#profile-next').click();form.locator('[name="roles"]').fill('Python engineer, Product engineer');form.locator('[name="locations"]').fill('France');form.locator('[name="remote"]').select_option('remote');page.locator('#profile-next').click()
+            page.locator('#profile-next').click()
+            expect(page.locator('#draft-status')).to_contain_text('Brouillon enregistré')
+            page.wait_for_timeout(500)
+            page.reload();expect(page.locator('[data-profile-step="1"]')).to_be_visible()
+            expect(form.locator('[name="name"]')).to_have_value('Alex Example')
+            assert 'Built production APIs' in form.locator('[name="cv_text"]').input_value()
+            form.locator('[name="roles"]').fill('Python engineer, Product engineer');form.locator('[name="locations"]').fill('France');form.locator('[name="remote"]').select_option('remote');page.locator('#profile-next').click()
             form.locator('[name="strengths"]').fill('Python, APIs');form.locator('[name="achievements"]').fill('Built a production API with a team.');page.locator('#profile-save').click()
             expect(page.locator('#explore')).to_be_visible();page.locator('#first-search').click();expect(page.locator('.offer-suggestion')).to_have_count(2)
             expect(page.locator('#chat-log')).to_contain_text('pistes dans la sélection')
@@ -65,6 +71,11 @@ with tempfile.TemporaryDirectory() as tmp:
             for width in (375,768,1024,1440):
                 page.set_viewport_size({'width':width,'height':1000});assert page.evaluate('document.documentElement.scrollWidth<=innerWidth'),f'Dashboard overflow {width}'
             page.screenshot(path=str(out/'product-dashboard.png'))
+            page.emulate_media(color_scheme='dark',reduced_motion='reduce')
+            page.screenshot(path=str(out/'product-dashboard-dark.png'))
+            page.locator('#assistant-open').click();expect(page.locator('#settings-screen')).to_be_visible()
+            page.locator('#source-boards').fill('ashby:example');page.locator('#save-source-boards').click()
+            expect(page.locator('#message')).to_contain_text('Sources enregistrées')
             page.locator('[data-screen="explore"]').click();page.set_viewport_size({'width':375,'height':812});assert page.evaluate('document.documentElement.scrollWidth<=innerWidth')
             page.screenshot(path=str(out/'product-search-mobile.png'))
             assert not errors,errors

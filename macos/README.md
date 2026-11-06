@@ -14,7 +14,7 @@ La recherche publique et le classement local ne consomment pas de modèle. Le ch
 
 ## Reconstruire
 
-Python 3.11+, Swift/Xcode Command Line Tools et CLI Codex officiel requis. Depuis la racine :
+Python 3.11+, Swift/Xcode Command Line Tools et CLI Codex natif officiel requis. Avec une installation npm, `CODEX_BINARY` doit désigner le binaire macOS sous `vendor/aarch64-apple-darwin/codex/codex`, pas le lanceur JavaScript. Depuis la racine :
 
 ```sh
 python3 -m venv --system-site-packages /tmp/candidatures-mac-build
@@ -30,3 +30,7 @@ La compilation est générique, sans chemin personnel ni données de candidature
 Les tests Python et navigateur utilisent des fournisseurs fictifs et un espace temporaire. Ils couvrent connexion obligatoire, onboarding, import, recherche, choix d’offres, préparation du PDF, consentements explicites et suivi manuel. La génération réelle dépend d’une connexion du propriétaire du compte et doit être vérifiée avec lui. Voir README pour les limites de sources, budgets, modèles et distribution.
 
 Le nom affiché est Open Vitæ. L’identifiant du paquet, le trousseau, les préférences et le dossier Application Support/Candidatures restent stables pour préserver les espaces existants.
+
+## Candidats de distribution
+
+La version vient de `pyproject.toml`, le numéro de compilation de `macos/release.json`. Le script `build.py --release` exige Developer ID, la distribution Sparkle vérifiée, une clé publique Ed25519 et un flux HTTPS. `distribute.py` notarise et agrafe les tickets, puis crée le DMG avec un raccourci Applications. Le workflow manuel produit une release GitHub en brouillon. Voir les secrets, le flux de mise à jour, la vérification sur Mac propre et la récupération dans [RELEASING.md](../docs/RELEASING.md). Aucune réussite de notarisation ou de mise à jour réelle n’est revendiquée ici.

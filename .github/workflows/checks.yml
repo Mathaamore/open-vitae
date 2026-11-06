@@ -34,3 +34,10 @@ jobs:
       - run: python -m pip install -e '.[test]'
       - run: python -m playwright install --with-deps chromium --only-shell
       - run: python scripts/check_product_ui.py
+      - run: python scripts/check_landing_ui.py
+
+  native-shell:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - run: swiftc -target arm64-apple-macos14.0 -parse-as-library macos/Candidatures.swift -o /tmp/open-vitae-shell -framework AppKit -framework WebKit

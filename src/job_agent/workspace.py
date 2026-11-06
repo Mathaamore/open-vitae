@@ -79,13 +79,29 @@ class Workspace:
         if minimum not in ('', None) and (not isinstance(minimum, int) or isinstance(minimum, bool) or not 0 <= minimum <= 1000000):
             raise ValueError('Salaire minimum invalide.')
         result['salary_min'] = minimum or None
+        if type(value.get('strict_constraints', False)) is not bool:
+            raise ValueError('Choix de contraintes invalide.')
+        result['strict_constraints'] = value.get('strict_constraints', False)
         if result['email'] and not re.fullmatch(r'[^\s@]+@[^\s@]+\.[^\s@]+', result['email']):
             raise ValueError('Adresse e-mail invalide.')
         if result['portfolio'] and not result['portfolio'].startswith('https://'):
             raise ValueError('Utilise une adresse HTTPS pour ton portfolio.')
         result['revision'] = (self.profile() or {}).get('revision', 0) + 1
         self.set_setting('profile', result)
+        self.set_setting('onboarding_draft', None)
         return result
+
+    def save_onboarding(self, value):
+        if not isinstance(value, dict) or set(value) != {'step', 'fields'} or type(value['step']) is not int or not 0 <= value['step'] <= 2:
+            raise ValueError('Étape de présentation invalide.')
+        limits = {'name': 120, 'bio': 2000, 'strengths': 4000, 'achievements': 10000, 'expectations': 4000,
+                  'email': 254, 'phone': 80, 'portfolio': 500, 'availability': 120, 'cv_text': 30000,
+                  'roles': 1000, 'locations': 1000, 'remote': 20, 'salary_min': 20, 'strict_constraints': 5}
+        fields = value['fields']
+        if not isinstance(fields, dict) or set(fields) - limits.keys() or any(not isinstance(text, str) or len(text) > limits[key] for key, text in fields.items()):
+            raise ValueError('Brouillon de profil invalide.')
+        self.set_setting('onboarding_draft', value)
+        return {'saved': True}
 
     def feedback(self):
         with self.store.db() as db:

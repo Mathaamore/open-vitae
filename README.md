@@ -14,8 +14,9 @@ The app has no paywall or hosted account. AI usage comes from your own provider 
 
 ## What it does
 
-- Onboarding with experience, strengths, motivations and search criteria. Import text PDFs, DOCX or TXT; scanned PDFs need OCR elsewhere.
-- Search public feeds from Himalayas and Arbeitnow, with source attribution and original application links.
+- Resumable local onboarding with experience, strengths, motivations and search criteria. Import text PDFs, DOCX or TXT; scanned PDFs need OCR elsewhere.
+- Search public feeds from Himalayas and Arbeitnow, plus up to six configured employer boards (Greenhouse, Lever, Ashby), with source attribution and original links.
+- Follow source progress, cancel between reads and keep collected offers; [source contracts and limits](docs/SOURCES.md).
 - Rank locally and refine suggestions using explicit accept/pass feedback. Search and ranking use no model tokens.
 - Discuss criteria with your AI provider. Proposed profile changes require confirmation.
 - Queue preparation after accepting an offer. Keep documented CV facts intact and review generated summaries and answers.
@@ -57,9 +58,13 @@ The default Mac workspace is `~/Library/Application Support/Candidatures`; the h
 
 ## Mac app
 
-The native AppKit/WKWebView shell targets macOS 14+ on Apple Silicon. It bundles the Python service, Codex and a browser engine; end users do not need a terminal. See [build instructions](macos/README.md).
+The native AppKit/WKWebView shell targets macOS 14+ on Apple Silicon. It bundles the Python service, Codex and a browser engine; end users do not need a terminal. See [build instructions](macos/README.md) and the [release and recovery runbook](docs/RELEASING.md).
 
-No notarized public installer is published yet. Local builds are ad-hoc signed. Developer ID signing, notarization and real-account verification remain release work; do not bypass macOS security protections to distribute a build.
+No notarized public installer is published yet. Local builds are ad-hoc signed. Developer ID, Sparkle, notarization and DMG tooling are available in the release-candidate workflow; the signed workflow, real-account access and clean-Mac journey still require verification before publication. Do not bypass macOS security protections to distribute a build.
+
+## Public website
+
+The French static landing page lives in [`site/`](site/README.md). Deploy to Vercel with **Root Directory `site`**, framework **Other**, no build command and output **`.`**. It never connects to the local service. The download CTA remains unavailable until a maintainer records a verified release.
 
 ## Privacy
 
@@ -75,6 +80,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for setup and review expectations, [archi
 .venv/bin/python -m unittest discover -s tests -q
 node --test tests/test_web.js
 .venv/bin/python scripts/check_product_ui.py
+.venv/bin/python scripts/check_landing_ui.py
 # After staging, inspect what Git would publish:
 .venv/bin/python scripts/check_repository.py
 ```

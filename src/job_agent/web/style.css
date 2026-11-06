@@ -32,3 +32,20 @@
 @media(max-width:1250px){.message:not(.error){left:calc(184px + (100% - 184px)/2);max-width:calc(100vw - 232px)}}
 @media(max-width:760px){.message:not(.error){left:50%;width:calc(100vw - 32px);max-width:calc(100vw - 32px);bottom:16px;font-size:12px;line-height:20px}.message .undo-button{min-height:44px}}
 .preference-proposal{padding:16px;margin:16px 0 24px;border:1px solid var(--line);border-radius:8px;background:var(--canvas)}.preference-proposal strong{display:block;font-size:12px;line-height:20px;font-weight:500;margin-bottom:8px}.preference-proposal p{font-size:12px;line-height:20px;margin:4px 0;overflow-wrap:anywhere}.preference-proposal button{margin-top:12px;font-size:12px;line-height:20px}
+
+/* Discovery reports completed reads, never an estimated percentage. */
+.discovery-progress{display:flex;align-items:center;gap:12px;padding:16px;background:var(--surface);border-radius:8px;margin-bottom:12px}
+.discovery-pulse{width:12px;height:12px;flex:none;background:var(--action);border-radius:50%;animation:discovery-pulse 1.5s ease-in-out infinite}
+@keyframes discovery-pulse{50%{opacity:.35;transform:scale(.8)}}
+.cv-drop.drag-over{background:var(--brand-soft);outline:2px solid var(--action)}
+@media(prefers-reduced-motion:reduce){.discovery-pulse{animation:none}}
+
+@media(prefers-color-scheme:dark){
+ :root{color-scheme:dark;--ink:#f1f3ef;--muted:#b3bcb7;--paper:#181818;--canvas:#1f1f1f;--surface:#272727;--line:#414642;--action:#d8eda2;--brand:#d8eda2;--focus:#b4ceff;--green:#a8dbbc;--green-soft:#1f3128;--amber:#edc68c;--amber-soft:#30291f;--red:#ffb0a5;--red-soft:#35231f}
+ button,.button-link,.welcome,.sidebar,.skip-link,.chat-composer,.message,#assistant-dialog,.layout-switch button[aria-pressed=true],.table-wrap[data-layout=grid] tr{background:var(--paper);color:var(--ink)}
+ .workspace-nav button:hover,.workspace-nav button[aria-current=page],tbody tr:hover,.assistant-compare>label:last-child textarea{background:var(--surface);color:var(--ink)}
+ button.primary,.button-link.primary{color:#181818;background:var(--action);border-color:var(--action)}
+ button.primary:hover,.button-link.primary:hover{background:#c8df92;border-color:#c8df92;color:#181818}
+ .brand-wordmark{filter:brightness(0) invert(1)}.product-mark{background:#d8eda2}.person-initial{background:var(--surface);color:var(--ink)}
+ .context-copy p,.offer-excerpt,.chat-message p{color:var(--muted)}.quiet{background:transparent;color:var(--muted)}
+}

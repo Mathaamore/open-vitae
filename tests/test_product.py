@@ -123,6 +123,18 @@ class ProductTest(unittest.TestCase):
             bad={'revision':after['revision'],'preferences':{'achievements':'An invented result'}}
             self.assertEqual(client.post('/api/profile/preferences',json=bad,headers=headers).status_code,409)
 
+    def test_source_configuration_and_draft_api_validate_before_persistence(self):
+        self.ws.save_profile(PROFILE)
+        provider=Mock();provider.status.return_value={'connected':True,'provider':'chatgpt'}
+        with patch.object(module,'store',self.store),patch.object(module,'workspace',self.ws),patch.object(module,'providers',provider):
+            client=TestClient(module.app);headers={'x-local-token':module.TOKEN}
+            self.assertEqual(client.put('/api/sources',json={'boards':['ashby:example']},headers=headers).status_code,200)
+            self.assertEqual(client.put('/api/sources',json={'boards':['https://127.0.0.1/']},headers=headers).status_code,409)
+            self.assertEqual(client.get('/api/sources').json()['boards'],['ashby:example'])
+            self.assertEqual(client.put('/api/profile/onboarding',json={'step':0,'fields':{'api_key':'not allowed'}},headers=headers).status_code,409)
+            self.assertIsNone(self.ws.setting('onboarding_draft'))
+            self.assertEqual(client.post('/api/discovery/cancel',json={}).status_code,403)
+
     def test_api_gates_data_and_profile_then_retains_manual_submission(self):
         provider=Mock();provider.status.return_value={'connected':False,'provider':'chatgpt'}
         with patch.object(module,'store',self.store),patch.object(module,'workspace',self.ws),patch.object(module,'providers',provider):

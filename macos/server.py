@@ -13,7 +13,11 @@ if __name__ == '__main__':
         os.setsid()
     os.environ['JOB_AGENT_ROOT'] = str(Path(sys.argv[1]).resolve())
     import uvicorn
-    from job_agent.app import app, assistant
+    try:
+        from job_agent.app import app, assistant
+    except ValueError as error:
+        print(json.dumps({'error': str(error)}), flush=True)
+        raise SystemExit(1) from None
     with socket.socket() as listener:
         listener.bind(('127.0.0.1', 0))
         listener.listen(128)

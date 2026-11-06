@@ -23,3 +23,7 @@ At most one inference runs at a time. The default daily request budget is 20, co
 Only task-relevant profile facts, selected text, short chat history or public job text are sent. Private search constraints must stay out of employer-facing answers. Suggestions never establish consent or change candidate facts. Search queries exclude contact details. Usage is displayed only when the provider reports it; no subscription credit balance is claimed.
 
 Use fictional profiles and mocked providers in tests. Real account authentication and inference must be checked by the account owner before a release is described as verified for that provider.
+
+## Distribution review (6 November 2026)
+
+[Official app-server guidance](https://learn.chatgpt.com/docs/app-server) permits continued app-server authentication for local/open-source applications and recommends migration to registered Sign in with ChatGPT. It excludes commercial/hosted services. Open Vitæ retains its isolated managed local flow; it does not extract another app’s credentials. A future registered integration must use its own client registration and token lifecycle, following the [official app-server configuration](https://developers.openai.com/siwc/token-sharing-open-source/codex-app-server). Model listing alone is not proof of inference access. Public release acceptance must verify sign-in and a real inference request using dedicated test access. No provider account was used for this change.

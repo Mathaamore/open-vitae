@@ -11,6 +11,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlparse
 
+from .migrations import prepare_database, SCHEMA_VERSION
+
 ROOT = Path(os.environ.get('JOB_AGENT_ROOT', Path(__file__).resolve().parents[2])).resolve()
 WEIGHTS = {'technical': 25, 'ownership': 25, 'growth': 20, 'remote': 15, 'compensation': 10, 'culture': 5}
 LOCKED = {'SUBMITTING', 'SUBMITTED', 'SUBMISSION_UNCERTAIN'}
@@ -68,6 +70,7 @@ class Store:
         if private.stat().st_mode & 0o7777 != 0o700:
             private.chmod(0o700)
         self.path = private / 'agent.sqlite3'
+        prepare_database(self.path)
         with self.db() as db:
             db.executescript('''
             CREATE TABLE IF NOT EXISTS jobs (
@@ -95,6 +98,7 @@ class Store:
             if 'target' not in columns:
                 db.execute('ALTER TABLE attempts ADD COLUMN target TEXT')
             db.execute('CREATE UNIQUE INDEX IF NOT EXISTS attempts_target ON attempts(target)')
+            db.execute(f'PRAGMA user_version={SCHEMA_VERSION}')
         if self.path.stat().st_mode & 0o7777 != 0o600:
             self.path.chmod(0o600)
 

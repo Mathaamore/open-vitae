@@ -1,8 +1,14 @@
 import AppKit
 import WebKit
+#if canImport(Sparkle)
+import Sparkle
+#endif
 
 @MainActor
 final class CandidaturesApp: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigationDelegate, WKUIDelegate, WKDownloadDelegate {
+    #if canImport(Sparkle)
+    var updater: SPUStandardUpdaterController!
+    #endif
     var window: NSWindow!
     var web: WKWebView!
     var backend: Process?
@@ -12,18 +18,21 @@ final class CandidaturesApp: NSObject, NSApplicationDelegate, NSWindowDelegate, 
     var scopedWorkspace: URL?
     var output: Pipe?
     var startupData = Data()
+    var startupFailure = false
     var loading: NSTextField!
     var downloads: [WKDownload] = []
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
+        #if canImport(Sparkle)
+        updater = SPUStandardUpdaterController(startingUpdater: true, updaterDelegate: nil, userDriverDelegate: nil)
+        #endif
         makeMenu()
         window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1360, height: 900), styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
         window.title = "Open Vitæ"
-        window.appearance = NSAppearance(named: .aqua)
         window.titlebarAppearsTransparent = true
         window.titlebarSeparatorStyle = .none
-        window.backgroundColor = NSColor(calibratedRed: 0.95, green: 0.96, blue: 0.97, alpha: 1)
+        window.backgroundColor = .windowBackgroundColor
         window.minSize = NSSize(width: 840, height: 580)
         window.setFrameAutosaveName("CandidaturesMainWindow")
         window.center()
@@ -69,6 +78,10 @@ final class CandidaturesApp: NSObject, NSApplicationDelegate, NSWindowDelegate, 
         let appItem = NSMenuItem(); menu.addItem(appItem)
         let appMenu = NSMenu(); appItem.submenu = appMenu
         appMenu.addItem(withTitle: "À propos d’Open Vitæ", action: #selector(about), keyEquivalent: "")
+        #if canImport(Sparkle)
+        let update = appMenu.addItem(withTitle: "Rechercher des mises à jour…", action: #selector(SPUStandardUpdaterController.checkForUpdates(_:)), keyEquivalent: "")
+        update.target = updater
+        #endif
         appMenu.addItem(.separator())
         appMenu.addItem(withTitle: "Quitter Open Vitæ", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         let fileItem = NSMenuItem(); menu.addItem(fileItem)
@@ -86,11 +99,11 @@ final class CandidaturesApp: NSObject, NSApplicationDelegate, NSWindowDelegate, 
         viewMenu.addItem(withTitle: "Agrandir", action: #selector(zoomIn), keyEquivalent: "+")
         viewMenu.addItem(withTitle: "Réduire", action: #selector(zoomOut), keyEquivalent: "-")
         viewMenu.addItem(withTitle: "Taille réelle", action: #selector(resetZoom), keyEquivalent: "0")
-        for submenu in [appMenu, fileMenu, viewMenu] { for item in submenu.items { if item.action != #selector(NSApplication.terminate(_:)) { item.target = self } } }
+        for submenu in [appMenu, fileMenu, viewMenu] { for item in submenu.items { if item.action != #selector(NSApplication.terminate(_:)) && item.target == nil { item.target = self } } }
         NSApp.mainMenu = menu
     }
 
-    @objc func about() { NSApp.orderFrontStandardAboutPanel(options: [.applicationName: "Open Vitæ", .applicationVersion: "0.3.1", .credits: NSAttributedString(string: "Ton espace local pour préparer la suite.\nLes candidatures restent envoyées manuellement.")]) }
+    @objc func about() { NSApp.orderFrontStandardAboutPanel(options: [.applicationName: "Open Vitæ", .applicationVersion: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "Développement", .credits: NSAttributedString(string: "Ton espace local pour préparer la suite.\nLes candidatures restent envoyées manuellement.")]) }
     @objc func showWorkspace() { if let workspace { NSWorkspace.shared.open(workspace) } }
     @objc func zoomIn() { web.pageZoom = min(1.6, web.pageZoom + 0.1) }
     @objc func zoomOut() { web.pageZoom = max(0.8, web.pageZoom - 0.1) }
@@ -129,7 +142,7 @@ final class CandidaturesApp: NSObject, NSApplicationDelegate, NSWindowDelegate, 
     func launch(_ root: URL) {
         stop()
         if root.startAccessingSecurityScopedResource() { scopedWorkspace = root }
-        workspace = root; startupData = Data(); base = nil; web.isHidden = true
+        workspace = root; startupData = Data(); startupFailure = false; base = nil; web.isHidden = true
         loading.stringValue = "Ouverture de ton espace…"; loading.isHidden = false
         let process = Process(); backend = process
         let resources = Bundle.main.resourceURL!
@@ -150,13 +163,17 @@ final class CandidaturesApp: NSObject, NSApplicationDelegate, NSWindowDelegate, 
                 guard self.backend === process, !data.isEmpty else { return }
                 self.startupData.append(data)
                 if self.base == nil, let line = String(data: self.startupData, encoding: .utf8)?.components(separatedBy: "\n").first,
-                   let json = line.data(using: .utf8), let value = try? JSONSerialization.jsonObject(with: json) as? [String: Int], let port = value["port"], port > 0, port < 65536 {
+                   let json = line.data(using: .utf8), let value = try? JSONSerialization.jsonObject(with: json) as? [String: Any] {
+                    if let error = value["error"] as? String {
+                        self.startupFailure = true; self.loading.stringValue = error; self.error(error)
+                    } else if let port = value["port"] as? Int, port > 0, port < 65536 {
                     let url = URL(string: "http://127.0.0.1:\(port)")!
                     self.base = url; self.waitForService(url, attempts: 60)
+                    }
                 }
             }
         }
-        process.terminationHandler = { _ in DispatchQueue.main.async { if self.backend === process { self.loading.isHidden = false; self.loading.stringValue = "Le service local s’est arrêté. Relance Open Vitæ." } } }
+        process.terminationHandler = { _ in DispatchQueue.main.async { if self.backend === process && !self.startupFailure { self.loading.isHidden = false; self.loading.stringValue = "Le service local s’est arrêté. Relance Open Vitæ." } } }
         do { try process.run() } catch { self.error("Impossible de démarrer le service local.") }
     }
 

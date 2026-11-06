@@ -20,7 +20,7 @@ python3 -m venv .venv
 
 - Add one focused regression check for logic changes. Use temporary workspaces, fictional profiles and mocked providers; never spend a contributor's tokens by default.
 - Verify keyboard navigation, visible focus, reduced motion and small windows for UI changes. Attach screenshots showing the changed workflow.
-- Run `python -m unittest discover -s tests -q`, `node --test tests/test_web.js` and the isolated product UI check where applicable.
+- Run `python -m unittest discover -s tests -q`, `node --test tests/test_web.js` and the isolated product UI check where applicable. The static site has its own `python scripts/check_landing_ui.py`; native bundles can be checked with `python scripts/check_macos_bundle.py` on Apple Silicon.
 - Keep new provider behavior explicit: authentication mode, transmitted data, model policy, limits and failure handling. No copied OAuth tokens, plaintext credential fallback, hidden model upgrades or fabricated account balances.
 - Keep candidate facts intact. AI suggestions require review. Never infer demographic answers or check consent automatically. Sending is manual.
 

@@ -20,7 +20,8 @@ for identity,company,role in [('offer-one','Example Tools','Python Product Engin
     module.store.import_jobs([{'id':identity,'company':company,'role':role,'url':'https://example.com/'+identity}])
     module.store.audit(identity,{'checked_at':now(),'sources':['https://example.com'],'remote':True,'location':'France','description':'Production tools, Python APIs and small product teams.','scores':{}})
 
-def refresh(workspace,query=''):
+def refresh(workspace,query='',progress=None,cancelled=None):
+    if progress:progress({'source':'Local QA fixture','completed':0,'total':1,'imported':0})
     result={'imported':2,'errors':[],'cached':False,'time':0,'checked_at':now(),'sources':['Local QA fixture']}
     workspace.set_setting('last_discovery',result);return result
 sources.refresh=refresh

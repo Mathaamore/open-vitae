@@ -4,6 +4,8 @@ import json
 import secrets
 import time
 import re
+from threading import Lock, Event
+from importlib.metadata import version
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from urllib.parse import urlparse
@@ -27,6 +29,9 @@ assistant = CodexAssistant(store.root)
 workspace = Workspace(store)
 providers = Providers(workspace, assistant)
 preparation_worker = ThreadPoolExecutor(max_workers=1, thread_name_prefix="dossier")
+discovery_lock = Lock()
+discovery_cancel = Event()
+discovery_status = {'state': 'idle'}
 TOKEN = secrets.token_urlsafe(32)
 WEB = Path(__file__).parent / 'web'
 context_file = store.root / 'data/company-context.json'
@@ -201,7 +206,8 @@ def bootstrap():
         connection = {'connected': False, 'error': str(error), 'provider': workspace.setting('provider', 'chatgpt')}
     return {'connection': connection, 'onboarded': bool(workspace.profile()),
             'profile': workspace.profile_draft() if connection.get('connected') else None,
-            'providers': CATALOG, 'version': '0.3.0'}
+            'onboarding': workspace.setting('onboarding_draft') if connection.get('connected') else None,
+            'providers': CATALOG, 'version': version('open-vitae')}
 
 
 @app.get('/api/providers')
@@ -230,6 +236,24 @@ async def save_profile(request: Request):
     return workspace.save_profile(await payload(request))
 
 
+@app.put('/api/profile/onboarding')
+async def save_onboarding(request: Request):
+    return workspace.save_onboarding(await payload(request))
+
+
+@app.get('/api/sources')
+def source_boards():
+    return {'boards': workspace.setting('source_boards', [])}
+
+
+@app.put('/api/sources')
+async def save_source_boards(request: Request):
+    data = await payload(request)
+    boards = sources.ats.boards(data.get('boards'))
+    workspace.set_setting('source_boards', boards)
+    return {'boards': boards}
+
+
 @app.post('/api/profile/import')
 async def import_profile(request: Request):
     buffer = bytearray()
@@ -246,6 +270,35 @@ def recommendations():
     return {'offers': sources.recommendations(workspace), 'last_search': workspace.setting('last_discovery'), 'feedback_count': len(workspace.feedback())}
 
 
+def refresh_discovery(query):
+    if not discovery_lock.acquire(blocking=False):
+        raise ValueError('Une recherche est déjà en cours. Tu peux suivre sa progression ou l’annuler.')
+    discovery_cancel.clear()
+    discovery_status.clear()
+    discovery_status.update({'state': 'running', 'source': 'Préparation des sources', 'completed': 0, 'imported': 0})
+    try:
+        status = sources.refresh(workspace, query, discovery_status.update, discovery_cancel.is_set)
+        discovery_status.update({'state': 'cancelled' if status.get('cancelled') else 'done', 'imported': status['imported']})
+    except BaseException:
+        discovery_cancel.set()
+        discovery_status.update({'state': 'failed'})
+        raise
+    finally:
+        discovery_lock.release()
+    return status
+
+
+@app.get('/api/discovery/status')
+def search_status():
+    return dict(discovery_status)
+
+
+@app.post('/api/discovery/cancel')
+def cancel_search():
+    discovery_cancel.set()
+    return {'cancelling': discovery_status.get('state') == 'running'}
+
+
 @app.post('/api/discovery')
 async def discover(request: Request):
     data = await payload(request)
@@ -254,7 +307,7 @@ async def discover(request: Request):
         raise ValueError('Recherche invalide.')
     if not workspace.profile():
         raise ValueError('Complète ton profil avant de chercher.')
-    status = await run_in_threadpool(sources.refresh, workspace, query)
+    status = await run_in_threadpool(refresh_discovery, query)
     offers = sources.recommendations(workspace, query)
     workspace.message('user', 'Recherche d’offres' + (': ' + query if query else ' selon mon profil'))
     workspace.message('assistant', f"{len(offers)} pistes dans la sélection, dont {status['imported']} nouvelles offres collectées. Tu peux retenir une offre pour préparer son dossier, ou passer avec un motif pour affiner la suite.")
@@ -331,7 +384,7 @@ async def chat(request: Request):
     answer = result['text'].strip()
     offers = None
     if result.get('search_query'):
-        search = await run_in_threadpool(sources.refresh, workspace, result['search_query'])
+        search = await run_in_threadpool(refresh_discovery, result['search_query'])
         offers = sources.recommendations(workspace, result['search_query'])
         answer += f"\n\n{len(offers)} pistes sont dans la sélection. " + ('Certaines sources sont indisponibles ; les offres conservées restent visibles.' if search['errors'] else 'Tu peux retenir celles qui méritent un dossier.')
     workspace.message('assistant', answer)

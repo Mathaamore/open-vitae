@@ -3,10 +3,12 @@ from datetime import datetime, timezone
 from urllib.parse import urlencode
 from html import unescape
 import re
+import math
 import time
 import unicodedata
 
 from .net import json_request
+from . import ats
 from .store import digest, now
 
 SOURCES = [('Arbeitnow · Europe', 'https://www.arbeitnow.com/api/job-board-api'),
@@ -46,7 +48,7 @@ def rank(job, profile, feedback, jobs):
             reasons.append('Télétravail annoncé')
     if profile.get('remote') == 'office' and remote is True:
         points -= 10
-    if profile.get('salary_min') and audit.get('salary_annual_max_eur') is not None and audit['salary_annual_max_eur'] < profile['salary_min']:
+    if profile.get('salary_min') and isinstance(audit.get('salary_annual_max_eur'), (int, float)) and audit['salary_annual_max_eur'] < profile['salary_min']:
         points -= 20
     places = profile.get('locations', [])
     if any(place.casefold() in location.casefold() for place in places):
@@ -71,32 +73,47 @@ def rank(job, profile, feedback, jobs):
     checks = ['Périmètre géographique du télétravail à confirmer' if remote else 'Organisation du travail à confirmer']
     if not audit.get('salary'):
         checks.append('Rémunération non publiée')
+    maximum = audit.get('salary_annual_max_eur')
+    if profile.get('salary_min') and isinstance(maximum, (int, float)) and maximum < profile['salary_min']:
+        checks.append('Salaire annoncé sous ton minimum souhaité')
+    if profile.get('remote') == 'remote' and remote is False:
+        checks.append('Ce poste ne correspond pas à ton souhait de télétravail')
     return points, reasons[:3], checks
 
 
-def refresh(workspace, query=''):
+def refresh(workspace, query='', progress=None, cancelled=None):
     last = workspace.setting('last_discovery')
-    signature = digest({'query': query, 'profile': workspace.profile()})
-    if last and last.get('signature') == signature and time.time() - last['time'] < 86400:
+    configured = ats.boards(workspace.setting('source_boards', []))
+    signature = digest({'query': query, 'profile': workspace.profile(), 'boards': configured})
+    if last and last.get('signature') == signature and not last.get('errors') and not last.get('cancelled') and time.time() - last['time'] < 86400:
         return {'cached': True, **last}
     errors, imported = [], 0
     known = {job['id']: job for job in workspace.store.all()}
     profile = workspace.profile() or {}
     search = urlencode({'q': query or (profile.get('roles') or [''])[0], 'country': {'france':'FR','fr':'FR','germany':'DE','deutschland':'DE','united kingdom':'GB','uk':'GB','spain':'ES','espagne':'ES','belgium':'BE','belgique':'BE','united states':'US','canada':'CA'}.get((profile.get('locations') or [''])[0].casefold(), ''), 'sort': 'relevant'})
-    feeds = SOURCES + [('Himalayas', 'https://himalayas.app/jobs/api/search?' + search)]
-    for source, endpoint in feeds:
+    feeds = SOURCES + [('Himalayas', 'https://himalayas.app/jobs/api/search?' + search)] + [(board, ats.endpoint(board)) for board in configured]
+    for index, (source, endpoint) in enumerate(feeds):
+        if cancelled and cancelled():
+            break
+        if progress:
+            progress({'source': source, 'completed': index, 'total': len(feeds), 'imported': imported})
         try:
             data = json_request(endpoint)
-            if not isinstance(data, dict):
+            if source in configured:
+                rows = ats.postings(source, data)
+            elif isinstance(data, dict):
+                rows = data.get('jobs') if source == 'Himalayas' else data.get('data')
+            else:
                 raise ValueError('Format de source invalide.')
-            rows = data.get('jobs') if source == 'Himalayas' else data.get('data')
             if not isinstance(rows, list):
                 raise ValueError('Format de source invalide.')
             for raw in rows[:100]:
+                if cancelled and cancelled():
+                    break
                 if not isinstance(raw, dict):
                     continue
                 if source == 'Himalayas':
-                    if any(not isinstance(raw.get(key), (int,float)) or isinstance(raw.get(key), bool) for key in ('pubDate','expiryDate')):
+                    if any(not isinstance(raw.get(key), (int,float)) or isinstance(raw.get(key), bool) or not math.isfinite(raw[key]) for key in ('pubDate','expiryDate')):
                         continue
                     restrictions = raw.get('locationRestrictions') or []
                     if not isinstance(restrictions, list) or any(not isinstance(item,str) for item in restrictions):
@@ -115,22 +132,25 @@ def refresh(workspace, query=''):
                 if identity in known:
                     continue
                 created = raw.get('created_at')
-                if isinstance(created, (int, float)) and time.time() - created > 45 * 86400:
+                if isinstance(created, (int, float)) and (isinstance(created, bool) or not 0 < created <= time.time() + 86400 or time.time() - created > 45 * 86400):
                     continue
+                salary_max = raw.get('salary_annual_max_eur')
+                if type(salary_max) not in (int, float) or not math.isfinite(salary_max) or not 0 <= salary_max <= 10000000:
+                    salary_max = None
                 workspace.store.import_jobs([{'id': identity, 'company': company[:200], 'role': title[:300], 'url': url}])
                 description = plain(raw.get('description', ''))[:18000]
                 workspace.store.audit(identity, {'checked_at': now(), 'sources': [url], 'source': source,
-                    'source_url': ('https://himalayas.app/' if source == 'Himalayas' else url), 'expiry': raw.get('expiry'), 'description': description, 'location': str(raw.get('location', ''))[:400],
-                    'salary': raw.get('salary'), 'salary_annual_max_eur': raw.get('salary_annual_max_eur'),
+                    'source_url': ('https://himalayas.app/' if source == 'Himalayas' else url), 'expiry': raw.get('expiry') if source == 'Himalayas' else None, 'description': description, 'location': str(raw.get('location') or '')[:400],
+                    'salary': raw.get('salary') if isinstance(raw.get('salary'), str) else None, 'salary_annual_max_eur': salary_max,
                     'remote': raw.get('remote') if isinstance(raw.get('remote'), bool) else None,
                     'active': None, 'france_allowed': None, 'requirements_checked': False,
                     'published_at': datetime.fromtimestamp(created, timezone.utc).isoformat() if isinstance(created, (int, float)) else None,
-                    'scores': {}, 'warnings': ['Annonce issue d’un agrégateur. Ouverture et éligibilité à vérifier sur le site employeur.']})
+                    'scores': {}, 'warnings': ['Annonce issue d’un tableau employeur. Ouverture et éligibilité à vérifier.' if raw.get('employer_board') else 'Annonce issue d’un agrégateur. Ouverture et éligibilité à vérifier sur le site employeur.']})
                 known[identity] = True; imported += 1
-        except (ValueError, OSError) as error:
+        except (ValueError, OSError, OverflowError) as error:
             errors.append({'source': source, 'message': str(error)[:300]})
     result = {'time': time.time(), 'checked_at': now(), 'imported': imported, 'errors': errors,
-              'sources': [name for name, _ in feeds], 'signature': signature}
+              'sources': [name for name, _ in feeds], 'signature': signature, 'cancelled': bool(cancelled and cancelled())}
     workspace.set_setting('last_discovery', result)
     return {'cached': False, **result}
 
@@ -147,6 +167,13 @@ def recommendations(workspace, query=''):
             continue
         if job['status'] == 'SUBMITTED' or job['category'] in {'CLOSED', 'INELIGIBLE'} or feedback.get(job['id'], {}).get('decision') in {'accept', 'reject', 'later'}:
             continue
+        if profile.get('strict_constraints'):
+            remote = job['audit'].get('remote')
+            maximum = job['audit'].get('salary_annual_max_eur')
+            if (profile.get('remote') == 'remote' and remote is False or
+                profile.get('remote') == 'office' and remote is True or
+                profile.get('salary_min') and isinstance(maximum, (int, float)) and maximum < profile['salary_min']):
+                continue
         points, reasons, checks = rank(job, profile, feedback, jobs)
         if query:
             points += min(12, len(terms(query) & terms(job['role'] + ' ' + job['company'] + ' ' + str(job['audit'].get('description', '')))) * 3)
