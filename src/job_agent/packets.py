@@ -20,10 +20,12 @@ from .store import LOCKED, digest, now
 class Page(HTMLParser):
     def __init__(self):
         super().__init__(); self.text = []; self.fields = []; self.labels = {}; self.label = None
-        self.current = None; self.skip = 0; self.link = None; self.links = []; self.language = None
+        self.current = None; self.skip = 0; self.link = None; self.links = []; self.language = None; self.form_language = None
 
     def handle_starttag(self, tag, attrs):
         a = dict(attrs)
+        if tag == "form":
+            self.form_language = a.get("lang") or self.language
         if tag == "html":
             self.language = a.get("lang", "")[:35]
         if tag in {'script', 'style', 'noscript'}:
@@ -37,7 +39,7 @@ class Page(HTMLParser):
             if key:
                 item = {'key': key[:200], 'label': a.get('aria-label') or a.get('placeholder') or key,
                         'type': a.get('type') or ('textarea' if tag == 'textarea' else 'select' if tag == 'select' else 'text'),
-                        'required': 'required' in a, 'id': a.get('id', key)}
+                        'required': 'required' in a, 'id': a.get('id', key), 'language': a.get('lang') or self.form_language or self.language}
                 if item['type'] == 'select':
                     item['options'] = []
                 self.fields.append(item); self.current = item if tag == 'select' else None
@@ -47,6 +49,8 @@ class Page(HTMLParser):
     def handle_endtag(self, tag):
         if tag in {'script', 'style', 'noscript'}:
             self.skip = max(0, self.skip - 1)
+        if tag == 'form':
+            self.form_language = None
         if tag == 'label':
             self.label = None
         if tag == 'select':
@@ -134,7 +138,8 @@ def inspect_offer(url):
             browser_error = tr('packets.the_application_form_could_not_be_read_check')
     if not exact:
         fields = fallback_fields()
-    return {'url': resolved, 'fields': fields, 'inspected': exact, 'language': parser.language,
+    form_language = next((field.get('language') for field in fields if field.get('language') and field.get('type') in {'email','file','textarea'}), parser.language)
+    return {'url': resolved, 'fields': fields, 'inspected': exact, 'language': form_language,
             'text': re.sub(r'\s+', ' ', ' '.join(parser.text))[:18000], 'warning': browser_error}
 
 
@@ -241,6 +246,11 @@ def prepare(workspace, providers, job_id, replace=False, expected_revision=None,
         check_output(summary,language)
         for answer in generated.values():check_output(answer,language)
         resume.validate_text(result,profile,language,template,selected,require_template=True)
+        description=result.get('job_description')
+        if description is not None:
+            if not isinstance(description,str) or len(description)>18000:
+                raise ValueError(tr('app.description_invalid'))
+            check_output(description,'en')
         for key in ('company_summary', 'product_summary', 'team_summary'):
             if not isinstance(result.get(key), str) or len(result[key]) > 3000:
                 raise ValueError(tr('packets.the_company_brief_could_not_be_read_check'))
@@ -249,10 +259,10 @@ def prepare(workspace, providers, job_id, replace=False, expected_revision=None,
         'output_languages': policy(language),
         'cv_template_lines': [{'text':line['text'],'width_points':round(line['width'],1),'font_size':round(line['size'],1)} for line in template['lines']] if template else None,
         'source_cv': cv_source[:12000] if not template else None,
-        'instruction': 'Return JSON: summary (short factual candidate summary), selected_facts (up to 5 integer indices from facts), company_summary (only from offer text; say unknown when missing), product_summary, team_summary (unknown if absent), answers (object question-key to answer string). Never answer consents or demographic questions. Selected fact indices refer to unchanged source facts. No invented accomplishments or product familiarity. Also return cv_lines when cv_template_lines is present: one faithfully translated/adapted string per source line, in the same order, preserving names, dates, numbers and all experiences, without adding or omitting lines. Keep each line concise enough for its width and font size. Otherwise return cv: {role: translated target role title, text: full translated source CV preserving its sections and all facts, strengths: translated strengths, selected: faithful translations of selected facts in index order}. All CV text uses the application_language, including headings. The summary and answers are employer-facing; company/product/team briefs are app information.',
+        'instruction': 'Return JSON: summary (short factual candidate summary), selected_facts (up to 5 integer indices from facts), company_summary (only from offer text; say unknown when missing), product_summary, team_summary (unknown if absent), answers (object question-key to answer string). Never answer consents or demographic questions. Selected fact indices refer to unchanged source facts. No invented accomplishments or product familiarity. Also return cv_lines when cv_template_lines is present: one faithfully translated/adapted string per source line, in the same order, preserving names, dates, numbers and all experiences, without adding or omitting lines. Keep each line concise enough for its width and font size. Otherwise return cv: {role: translated target role title, text: full translated source CV preserving its sections and all facts, strengths: translated strengths, selected: faithful translations of selected facts in index order}. All CV text uses the application_language, including headings. The summary and answers are employer-facing; company/product/team briefs are app information. Also return job_description: a faithful translation of the supplied offer text in the information_language, preserving uncertainties and not adding employer claims.',
         'profile': {key: profile.get(key) for key in ('bio', 'strengths', 'expectations')},
-        'facts': source_facts[:120], 'offer': {'company': job['company'], 'role': job['role'], 'text': info['text'][:12000]},
-        'questions': [{'key': field['key'], 'label': field['label'][:1500]} for field in text_fields]}, max_output=4000, validator=validate)
+        'facts': source_facts[:120], 'offer': {'company': job['company'], 'role': job['role'], 'text': info['text'][:18000]},
+        'questions': [{'key': field['key'], 'label': field['label'][:1500]} for field in text_fields]}, max_output=6000, validator=validate)
     validate(result)
     summary, selected, generated = result['summary'], result['selected_facts'], result['answers']
     if digest(workspace.profile()) != original_profile or store.get(job_id)['revision'] != job['revision'] or store.get(job_id)['updated_at'] != job['updated_at']:
@@ -282,7 +292,8 @@ def prepare(workspace, providers, job_id, replace=False, expected_revision=None,
         else:
             answers[key] = ''
     missing = [] if info['inspected'] else [tr('portable.check_the_exact_questions_on_the_employer_s')]
-    audit = {**job['audit'], 'checked_at': now(), 'sources': list(dict.fromkeys(job['audit'].get('sources', []) + [info['url']])),
+    display_description=result.get('job_description')
+    audit = {**job['audit'], **({'description_translation':{'language':'en','text':display_description,'source_hash':digest(info['text'])}} if display_description else {}), 'checked_at': now(), 'sources': list(dict.fromkeys(job['audit'].get('sources', []) + [info['url']])),
              'description': info['text'], 'application_url': info['url'],
              'company_context': {'company': {'summary': result['company_summary'], 'product': result['product_summary'],
                  'sources': [context_url], 'basis': context_basis, 'checked_on': now()[:10]}, 'role': {'team': None, 'scope': result['team_summary'], 'sources': [context_url]}},

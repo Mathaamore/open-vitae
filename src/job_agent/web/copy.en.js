@@ -533,5 +533,11 @@ globalThis.OV_COPY = {
   "languages.it": "Italian",
   "languages.nl": "Dutch",
   "languages.pt": "Portuguese",
-  "languages.materials": "CV and answers: {language} · Explanations: English"
+  "languages.materials": "CV and answers: {language} · Explanations: English",
+  "app.original_description": "Show original description",
+  "app.translate_description": "Translate description into English",
+  "app.translate_description_help": "Uses your connected AI service. Only the job description is shared; your original stays unchanged.",
+  "app.description_translated": "English translation ready. The source description is preserved.",
+  "languages.prepare": "Prepare in {language}",
+  "languages.old_materials": "Your saved answers appear to use another language. Prepare a new version in the form language; your existing files stay available."
 };

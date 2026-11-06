@@ -263,5 +263,7 @@
   "resume.import_a_valid_pdf_cv_template": "Import a valid PDF CV template.",
   "resume.choose_a_supported_application_language": "Choose a supported application language.",
   "languages.inconsistent_output": "The draft did not use {language} consistently. Prepare it again; your existing materials are unchanged.",
-  "resume.source_text_changed": "Your CV text differs from the PDF template. Import a corrected one-page PDF, or stop using its layout before saving; the original is unchanged."
+  "resume.source_text_changed": "Your CV text differs from the PDF template. Import a corrected one-page PDF, or stop using its layout before saving; the original is unchanged.",
+  "app.description_missing": "Add a job description before requesting a translation.",
+  "app.description_invalid": "The translated job description could not be read. Your previous materials are unchanged."
 }

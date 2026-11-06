@@ -15,13 +15,14 @@ class FakeProvider:
     def complete(self,task,payload,max_output=1600,**kwargs):
         if task=='prepare_application':
             return {'summary':'I build useful products with Python.','selected_facts':[0], 'company_summary':'Example builds a production tool.','product_summary':'A production tool used by teams.','team_summary':'Team not confirmed.', 'answers':{'body':'I build useful products with Python and enjoy working with product teams.'}, **({'cv_lines':[line['text'] for line in payload['cv_template_lines']]} if payload.get('cv_template_lines') else {})}
+        if task=='translate_job_description':return {'text':'We build product tools with Python and APIs for teams.'}
         if task=='rewrite':return {'text':'A shorter factual version.','notes':'Fictional test response.'}
         return {'text':'We can refine the team you’re looking for before searching.','preferences':{'expectations':'Une petite équipe produit'}}
 
 module.providers=FakeProvider()
 for identity,company,role in [('offer-one','Example Tools','Python Product Engineer'),('offer-two','Second Example','Data Engineer')]:
     module.store.import_jobs([{'id':identity,'company':company,'role':role,'url':'https://example.com/'+identity}])
-    module.store.audit(identity,{'checked_at':now(),'sources':['https://example.com'],'remote':True,'location':'France','description':'Production tools, Python APIs and small product teams.','scores':{}})
+    module.store.audit(identity,{'checked_at':now(),'sources':['https://example.com'],'remote':True,'location':'France','description':'Nous construisons des outils produit avec Python et des API pour les équipes.' if identity=='offer-one' else 'Production tools, Python APIs and small product teams.','scores':{}})
 
 def refresh(workspace,query='',progress=None,cancelled=None):
     if progress:progress({'source':'Local QA fixture','completed':0,'total':1,'imported':0})

@@ -28,8 +28,9 @@ def application_language(job, info=None):
     fields = ' '.join(field.get('label', '') for field in info.get('fields', [])
                       if field.get('type') not in {'file', 'email', 'tel'})
     declared = (info.get('language') or '').split('-')[0].lower()
-    return ((job.get('audit') or {}).get('application_language') or detect(fields)
-            or (declared if declared in LANGUAGES else None)
+    return ((job.get('audit') or {}).get('application_language')
+            or (declared if info.get('inspected') and declared in LANGUAGES else None)
+            or detect(fields) or (declared if declared in LANGUAGES else None)
             or detect(info.get('text', '') or (job.get('audit') or {}).get('description', ''))
             or APP_LANGUAGE)
 

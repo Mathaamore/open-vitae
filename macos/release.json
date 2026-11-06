@@ -1,5 +1,5 @@
 {
-  "build": 5,
+  "build": 6,
   "minimum_macos": "14.0",
   "bundle_id": "xyz.mathaamore.candidatures"
 }

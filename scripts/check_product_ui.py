@@ -77,6 +77,9 @@ with tempfile.TemporaryDirectory() as tmp:
             page.locator('[data-id="offer-one"][data-interest="later"]').click();expect(page.locator('.offer-suggestion')).to_have_count(0)
             page.locator('[data-screen="dashboard"]').click();expect(page.locator('#rows [data-open="offer-one"]')).to_be_visible()
             page.locator('[data-open="offer-one"]').click()
+            page.locator('#translate-description').click()
+            expect(page.locator('.job-description').first).to_have_text('We build product tools with Python and APIs for teams.')
+            expect(page.get_by_text('Show original description',exact=True)).to_be_visible()
             page.locator('[data-prepare-job="offer-one"]').click()
             expect(page.locator('#tools-screen')).to_be_hidden()
             for _ in range(100):

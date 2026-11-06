@@ -16,7 +16,7 @@ INVENTORY = r'''() => {
      }
      const f=groups.get(groupKey); f.required ||= e.required || /\*\s*$/.test(f.label); const count=f.label.match(/select\s+(\d+)/i); if(count) f.selection_count=Number(count[1]); f.options.push({index,value:e.value==='on'?label(e):e.value,label:label(e)});
    } else {
-     fields.push({key,label:label(e),type,index,required:e.required || /\*\s*$/.test(label(e)),accept:e.accept||'',
+     fields.push({key,label:label(e),type,index,language:e.closest('[lang]')?.getAttribute('lang') || '',required:e.required || /\*\s*$/.test(label(e)),accept:e.accept||'',
        options:e.tagName==='SELECT'?[...e.options].map(o=>({value:o.value,label:o.text})):[]});
    }
  });

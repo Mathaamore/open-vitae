@@ -22,3 +22,5 @@ The bundle excludes personal workspaces and includes licenses in `Contents/Resou
 Tests use temporary workspaces and fictional providers. See the root README for test commands and limits. Real account generation, notarization, updates and checks on a clean Mac require separate release acceptance; passing fixture tests does not establish those results.
 
 Version comes from `pyproject.toml`; build number from `macos/release.json`. `build.py --release` requires Developer ID, verified Sparkle, an Ed25519 public key and HTTPS feed. `distribute.py` notarizes, staples tickets and creates the DMG. The manual workflow creates a draft GitHub release.
+
+File imports use the native WebKit upload panel, restricted to the local workspace page. Canceling the panel leaves the current profile unchanged. Test the CV picker in the Mac app as well as in browser QA; a successful browser import does not test WKWebView’s native panel. Keep only the installed copy in Applications registered for everyday use; build and QA copies can appear as separate apps in Launch Services.
