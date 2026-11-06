@@ -60,7 +60,7 @@ if not any(browser_cache.glob('chromium_headless_shell-*')):
 run(sys.executable, '-m', 'PyInstaller', '--noconfirm', '--onedir', '--name', 'candidatures-service',
     '--paths', root/'src', '--add-data', str(root/'src/job_agent/web')+':job_agent/web',
     '--add-data',str(root/'src/job_agent/locales')+':job_agent/locales',
-    '--collect-all','playwright','--copy-metadata','open-vitae','--copy-metadata','keyring','--hidden-import','keyring.backends.macOS',
+    '--collect-all','playwright','--collect-all','pdfplumber','--collect-all','pdfminer','--collect-all','pypdfium2','--copy-metadata','open-vitae','--copy-metadata','keyring','--hidden-import','keyring.backends.macOS',
     '--hidden-import', 'uvicorn.loops.asyncio', '--hidden-import', 'uvicorn.protocols.http.h11_impl',
     '--hidden-import', 'uvicorn.lifespan.on', '--exclude-module', 'pytest', '--exclude-module', 'numpy',
     '--exclude-module', 'pandas', '--exclude-module', 'matplotlib',
@@ -85,7 +85,7 @@ shutil.copy2(root/'THIRD_PARTY_NOTICES.md',resources/'THIRD_PARTY_NOTICES.md')
 shutil.copytree(browser_cache,resources/'browsers',symlinks=True)
 licenses=resources/'licenses';licenses.mkdir()
 inventory=[]
-for name in ['fastapi','starlette','uvicorn','h11','pydantic','pydantic_core','typing_extensions','anyio','click','playwright','pyee','greenlet','pypdf','reportlab','pillow','charset-normalizer','keyring','jaraco.classes','jaraco.context','jaraco.functools','more-itertools','pyinstaller']:
+for name in ['fastapi','starlette','uvicorn','h11','pydantic','pydantic_core','typing_extensions','anyio','click','playwright','pyee','greenlet','pypdf','pdfplumber','pdfminer.six','pypdfium2','cryptography','cffi','pycparser','reportlab','pillow','charset-normalizer','keyring','jaraco.classes','jaraco.context','jaraco.functools','more-itertools','pyinstaller']:
     try: distribution=importlib.metadata.distribution(name)
     except importlib.metadata.PackageNotFoundError: continue
     inventory.append({'name':name,'version':distribution.version,'license':distribution.metadata.get('License-Expression') or distribution.metadata.get('License','See included license')})

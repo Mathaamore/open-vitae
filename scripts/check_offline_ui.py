@@ -42,7 +42,8 @@ def main():
                 page.locator('#manual-retrieve').click();expect(page.locator('#manual-status')).to_contain_text('Save the link')
                 manual.locator('[name="company"]').fill('Fictional Tools');manual.locator('[name="role"]').fill('Python engineer');page.locator('#manual-save').click()
                 expect(page.locator('#job-title')).to_contain_text('Fictional Tools');identity=page.url.split('job=')[1].split('&')[0]
-                page.locator('[data-edit-opportunity]').click();manual.locator('[name="description"]').fill('A documented Python role. Eligibility and salary unverified.');page.locator('#manual-save').click()
+                page.locator('[data-edit-opportunity]').click();manual.locator('[name="description"]').fill('A documented Python role. Eligibility and salary unverified.');manual.locator('[name="application_language"]').select_option('en');page.locator('#manual-save').click()
+                assert page.request.get(url+'/api/jobs/'+identity).json()['audit']['application_language']=='en'
                 page.locator('.preparation-alternatives').click();page.locator('[data-local-tools]').click();expect(page.locator('#tools-screen')).to_be_visible()
                 page.locator('#local-draft-details').click();page.locator('#local-motivation').fill('I build useful Python services.');page.locator('#local-draft').click()
                 expect(page.locator('#panel-dossier')).to_be_visible();expect(page.locator('[data-answer="body"]')).to_have_value('I build useful Python services.')

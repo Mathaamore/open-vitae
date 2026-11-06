@@ -300,6 +300,45 @@
                 "minimum": 0,
                 "maximum": 119
               }
+            },
+            "cv_lines": {
+              "type": "array",
+              "maxItems": 180,
+              "items": {
+                "type": "string",
+                "maxLength": 2000
+              }
+            },
+            "cv": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "text",
+                "strengths",
+                "selected"
+              ],
+              "properties": {
+                "role": {
+                  "type": "string",
+                  "maxLength": 300
+                },
+                "text": {
+                  "type": "string",
+                  "maxLength": 12000
+                },
+                "strengths": {
+                  "type": "string",
+                  "maxLength": 12000
+                },
+                "selected": {
+                  "type": "array",
+                  "maxItems": 5,
+                  "items": {
+                    "type": "string",
+                    "maxLength": 3000
+                  }
+                }
+              }
             }
           }
         }

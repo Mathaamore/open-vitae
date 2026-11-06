@@ -38,6 +38,8 @@
   function fillProfile(value) {
     const form = el('profile-form');
     for (const field of form.elements) if (field.name) { if(field.type==='checkbox'){field.checked=value[field.name]===true || value[field.name]==='on';continue;} field.value = Array.isArray(value[field.name]) ? value[field.name].join(', ') : value[field.name] ?? ''; }
+    el('cv-template-clear').hidden = !value.cv_template;
+    el('cv-import-status').textContent = value.cv_template ? t('resume.saved_layout') : t('screen.no_cv_ready_add_a_few_concrete_achievements');
     window.profileDirty = false;
   }
   function profileStep(value) {
@@ -129,7 +131,8 @@
     try {
       const result = await api('/api/profile/import?name=' + encodeURIComponent(file.name), {method:'POST', headers:{'Content-Type':'application/octet-stream'}, body:await file.arrayBuffer()});
       el('profile-form').elements.namedItem('cv_text').value = result.text; window.profileDirty = true; queueDraft();
-      el('cv-import-status').textContent = `${result.characters.toLocaleString('en')} characters imported. Review the text and correct any errors.`;
+      el('profile-form').elements.namedItem('cv_template').value = result.template || ''; el('cv-template-clear').hidden = !result.template; queueDraft();
+      el('cv-import-status').textContent = `${result.characters.toLocaleString('en')} characters imported. ${result.template_message} Review the extracted text.`;
     } catch (error) { el('cv-import-status').textContent = error.message; }
     finally { el('cv-upload').disabled = false; }
   }
@@ -273,6 +276,7 @@
     el('connection-dialog').addEventListener('cancel', event=>{event.preventDefault();closeConnection();});
     el('oauth-continue').onclick=()=>{el('connection-progress').textContent=t('ux.waiting');};
     el('continue-local').onclick=async()=>{try{await api('/api/providers/local',{method:'POST',body:'{}'});bootstrap=await api('/api/bootstrap');profile=bootstrap.profile||{};if(bootstrap.onboarded)activate();else editProfile();}catch(error){gateMessage(error.message,true);}};
+    el('cv-template-clear').onclick=()=>{el('profile-form').elements.namedItem('cv_template').value='';el('cv-template-clear').hidden=true;window.profileDirty=true;queueDraft();el('cv-import-status').textContent=t('resume.removed_layout');};
     el('cv-upload').onchange=()=>importCV();
     const drop=document.querySelector('.cv-drop');
     drop.ondragover=event=>{event.preventDefault();drop.classList.add('drag-over');};

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from .languages import application_language, policy, check_output
 from .i18n import tr, system_text
 
 import json
@@ -21,7 +22,7 @@ from .store import Store, artifact, LOCKED, now
 from .assistant import CodexAssistant
 from .workspace import Workspace, extract_resume, preference_patch
 from .providers import Providers, CATALOG
-from . import sources, packets, opportunities, portable
+from . import sources, packets, opportunities, portable, resume
 from starlette.concurrency import run_in_threadpool
 
 app = FastAPI(title='Open Vitæ', docs_url=None, redoc_url=None)
@@ -74,6 +75,7 @@ def session(): return {'token':TOKEN}
 def present_job(value):
     import copy
     value=copy.deepcopy(value)
+    value["application_language"]=application_language(value)
     if value.get('preparation'):
         value['preparation']['message']=system_text(value['preparation']['message'])
     value['problems']=[system_text(item) for item in value.get('problems',[])]
@@ -215,8 +217,10 @@ async def suggestion(job_id: str, request: Request):
     def validate(result):
         if not isinstance(result.get('text'), str) or not result['text'].strip() or len(result['text']) > 20000 or not isinstance(result.get('notes'), str):
             raise ValueError(tr('assistant.the_suggested_revision_could_not_be_read_your'))
+        check_output(result['text'],application_language(current))
+        check_output(result['notes'],'en')
     result = await run_in_threadpool(providers.complete, 'rewrite', {'profile': {key: (value[:10000] if isinstance(value, str) else value) for key, value in profile.items() if key in {'bio','strengths','achievements','cv_text','expectations'}}, 'context': context, 'question': field.get('label'),
-        'original': text, 'instruction': instruction, 'format': 'Return JSON with text and notes.'}, validator=validate)
+        'original': text, 'instruction': instruction, 'output_languages': policy(application_language(current)), 'format': 'Return JSON with text and notes.'}, validator=validate)
     validate(result)
     return result
 
@@ -361,7 +365,8 @@ async def import_profile(request: Request):
         if len(buffer) > 8000000:
             raise ValueError(tr('app.le_cv_doit_faire_moins_de_8_mo'))
     text = await run_in_threadpool(extract_resume, bytes(buffer), request.query_params.get('name', ''))
-    return {'text': text, 'characters': len(text)}
+    source=await run_in_threadpool(resume.import_source,workspace,bytes(buffer),request.query_params.get('name',''))
+    return {'text': text, 'characters': len(text), **source}
 
 
 @app.get('/api/recommendations')
@@ -504,6 +509,7 @@ async def chat(request: Request):
     def validate(result):
         if not isinstance(result.get('text'), str) or not 1 <= len(result['text'].strip()) <= 8000:
             raise ValueError(tr('app.the_response_could_not_be_used_your_profile'))
+        check_output(result['text'],'en')
         preference_patch(result.get('preferences'))
         query = result.get('search_query')
         if query is not None and (not isinstance(query,str) or len(query) > 180 or '@' in query or re.search(r'\d{7,}',query) or profile['name'].casefold() in query.casefold()):

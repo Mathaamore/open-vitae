@@ -1,6 +1,7 @@
 """Local opportunity editing and explicit, read-only retrieval of public job metadata."""
 
 from .i18n import tr
+from .languages import LANGUAGES
 from html.parser import HTMLParser
 import ipaddress
 import json
@@ -50,12 +51,16 @@ def canonical_url(value):
 
 
 def fields(value):
-    if not isinstance(value,dict) or set(value)-{'company','role','url','description','location','salary'}:
+    if not isinstance(value,dict) or set(value)-{'company','role','url','description','location','salary','application_language'}:
         raise ValueError(tr('opportunities.the_job_details_could_not_be_read_check'))
     result={key:text(value.get(key,''),key,limit) for key,limit in {'company':200,'role':300,'description':18000,'location':400,'salary':500}.items()}
     result['url']=canonical_url(value.get('url',''))
+    language=value.get('application_language','')
+    if not isinstance(language,str) or language and language not in LANGUAGES:
+        raise ValueError(tr('resume.choose_a_supported_application_language'))
     if not any(result.values()):
         raise ValueError(tr('opportunities.add_a_job_link_description_or_a_few'))
+    if language:result['application_language']=language
     result['company']=result['company'] or tr('opportunities.company_not_provided')
     result['role']=result['role'] or tr('opportunities.role_not_provided')
     return result
@@ -81,7 +86,7 @@ def add(workspace, value, source='manual'):
     workspace.store.import_jobs([{'id':identity,'company':value['company'],'role':value['role'],'url':value['url'],'manual':True}])
     workspace.store.audit(identity,{'checked_at':now(),'sources':[value['url']] if value['url'] else ['local:manual'],
         'source':tr('origin.manual') if source=='manual' else tr('origin.portable'), 'origin':source,'source_url':value['url'],'description':value['description'],'location':value['location'],
-        'salary':value['salary'],'pending_retrieval':bool(value['url'] and not value['description']),
+        'salary':value['salary'],'application_language':value.get('application_language',''),'pending_retrieval':bool(value['url'] and not value['description']),
         'active':None,'requirements_checked':False,'scores':{},'warnings':[tr('opportunities.details_have_not_been_verified_check_the_role')]})
     workspace.decide(identity,'later')
     return {'id':identity,'duplicate':False}
@@ -93,7 +98,7 @@ def edit(workspace, identity, value):
     duplicate=find_duplicate(workspace.store,normalized['url'])
     if duplicate and duplicate['id'] != identity:
         raise ValueError(tr('opportunities.this_link_belongs_to_another_saved_job_open'))
-    audit={**job['audit'],'title':normalized['role'],**{key:normalized[key] for key in ('description','location','salary')},
+    audit={**job['audit'],'title':normalized['role'],'application_language':normalized.get('application_language',''),**{key:normalized[key] for key in ('description','location','salary')},
            'source_url':normalized['url'],'pending_retrieval':bool(normalized['url'] and not normalized['description']),
            'active':None,'requirements_checked':False,'location_allowed':None,'france_allowed':None,
            'scores':{},'company_context':None,'external_analysis':None,'requirements':[],'blockers':[],'published_at':None,

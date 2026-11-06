@@ -88,6 +88,15 @@ class Workspace:
             raise ValueError(tr('workspace.enter_a_valid_email_address'))
         if result['portfolio'] and not result['portfolio'].startswith('https://'):
             raise ValueError(tr('workspace.use_an_https_link_for_your_portfolio'))
+        template=value.get('cv_template',(self.profile() or {}).get('cv_template',''))
+        if not isinstance(template,str):raise ValueError(tr('resume.import_a_valid_pdf_cv_template'))
+        if template:
+            from .resume import source_path
+            path=source_path(self,template)
+            source_text=extract_resume(path.read_bytes(),'template.pdf')
+            if re.sub(r'\s+',' ',source_text).strip()!=re.sub(r'\s+',' ',result['cv_text']).strip():
+                raise ValueError(tr('resume.source_text_changed'))
+        result['cv_template']=template
         result['revision'] = (self.profile() or {}).get('revision', 0) + 1
         self.set_setting('profile', result)
         self.set_setting('onboarding_draft', None)
@@ -98,7 +107,7 @@ class Workspace:
             raise ValueError(tr('workspace.this_setup_step_could_not_be_saved_reload'))
         limits = {'name': 120, 'bio': 2000, 'strengths': 4000, 'achievements': 10000, 'expectations': 4000,
                   'email': 254, 'phone': 80, 'portfolio': 500, 'availability': 120, 'cv_text': 30000,
-                  'roles': 1000, 'locations': 1000, 'remote': 20, 'salary_min': 20, 'strict_constraints': 5}
+                  'cv_template': 64, 'roles': 1000, 'locations': 1000, 'remote': 20, 'salary_min': 20, 'strict_constraints': 5}
         fields = value['fields']
         if not isinstance(fields, dict) or set(fields) - limits.keys() or any(not isinstance(text, str) or len(text) > limits[key] for key, text in fields.items()):
             raise ValueError(tr('workspace.your_progress_could_not_be_saved_check_the'))

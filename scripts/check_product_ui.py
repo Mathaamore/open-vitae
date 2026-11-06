@@ -31,14 +31,22 @@ with tempfile.TemporaryDirectory() as tmp:
             page.locator('#optional-ai').click();page.locator('[data-provider="gemini"]').click();page.locator('#provider-key').fill('local-test-key-not-real');page.locator('#connect-provider').click()
             expect(page.locator('#profile-step')).to_be_visible()
             form=page.locator('#profile-form');form.locator('[name="name"]').fill('Alex Example');form.locator('[name="email"]').fill('alex@example.com');form.locator('[name="bio"]').fill('I build useful products with Python.')
-            page.locator('#cv-upload').set_input_files({'name':'resume.txt','mimeType':'text/plain','buffer':b'2024-2026 Engineer at Example. Built production APIs with a product team.'})
+            import io
+            from reportlab.pdfgen import canvas
+            cv=io.BytesIO();cv_page=canvas.Canvas(cv);cv_page.setFont('Helvetica',11)
+            cv_page.drawString(40,780,'2024-2026 Engineer at Example. Built production APIs with a product team.');cv_page.save()
+            page.locator('#cv-upload').set_input_files({'name':'fictional-resume.pdf','mimeType':'application/pdf','buffer':cv.getvalue()})
             expect(page.locator('#cv-import-status')).to_contain_text('characters imported')
+            expect(page.locator('#cv-import-status')).to_contain_text('One-page PDF saved')
+            assert len(form.locator('[name="cv_template"]').input_value())==64
+            expect(page.locator('#cv-template-clear')).to_be_visible()
             page.screenshot(path=str(out/'product-onboarding.png'))
             page.locator('#profile-next').click()
             expect(page.locator('#draft-status')).to_contain_text('Progress saved')
             page.wait_for_timeout(500)
             page.reload();expect(page.locator('[data-profile-step="1"]')).to_be_visible()
             expect(form.locator('[name="name"]')).to_have_value('Alex Example')
+            assert len(form.locator('[name="cv_template"]').input_value())==64
             assert 'Built production APIs' in form.locator('[name="cv_text"]').input_value()
             form.locator('[name="roles"]').fill('Python engineer, Product engineer');form.locator('[name="locations"]').fill('France');form.locator('[name="remote"]').select_option('remote');page.locator('#profile-next').click()
             form.locator('[name="strengths"]').fill('Python, APIs');form.locator('[name="achievements"]').fill('Built a production API with a team.');page.locator('#profile-save').click()
@@ -85,6 +93,8 @@ with tempfile.TemporaryDirectory() as tmp:
             page.screenshot(path=str(out/'product-dossier.png'))
             import shutil
             shutil.copyfile(workspace/job['dossier']['attachments'][0]['path'],out/'product-resume.pdf')
+            from pypdf import PdfReader
+            assert len(PdfReader(out/'product-resume.pdf').pages)==1
             page.locator('#review-dossier').click();expect(page.locator('#record-receipt')).to_be_visible();page.locator('#record-receipt').click();expect(page.locator('#panel-suivi')).to_be_visible()
             assert Store(workspace).get('offer-one')['status']=='SUBMITTED'
             page.locator('#tracking-open').click()

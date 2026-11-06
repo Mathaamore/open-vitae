@@ -519,5 +519,19 @@ globalThis.OV_COPY = {
   "tracking.note_added": "Note added",
   "tracking.in_progress_detail": "Applications awaiting a reply, in review, in interviews or with an offer.",
   "tracking.closed_detail": "Applications you recorded as rejected or withdrawn.",
-  "tracking.recorded_by_you": "Latest recruitment stage recorded by you."
+  "tracking.recorded_by_you": "Latest recruitment stage recorded by you.",
+  "resume.saved_layout": "Using your saved one-page PDF layout. Import another PDF to replace it.",
+  "resume.removed_layout": "PDF layout removed from this profile draft. The source text stays available. Save your profile to confirm.",
+  "resume.clear_layout": "Stop using the imported PDF layout",
+  "languages.label": "Application language",
+  "languages.auto": "Detect from the employer’s form (English fallback)",
+  "languages.help": "Used for your CV and answers. Explanations stay in the app language.",
+  "languages.en": "English",
+  "languages.fr": "French",
+  "languages.de": "German",
+  "languages.es": "Spanish",
+  "languages.it": "Italian",
+  "languages.nl": "Dutch",
+  "languages.pt": "Portuguese",
+  "languages.materials": "CV and answers: {language} · Explanations: English"
 };

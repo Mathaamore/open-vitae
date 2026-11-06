@@ -1,6 +1,8 @@
 """Read public forms, prepare grounded drafts and produce a portable PDF; never submit."""
 
 from .i18n import tr
+from .languages import application_language, policy, check_output
+from . import resume
 from html import escape, unescape
 from html.parser import HTMLParser
 import io
@@ -18,10 +20,12 @@ from .store import LOCKED, digest, now
 class Page(HTMLParser):
     def __init__(self):
         super().__init__(); self.text = []; self.fields = []; self.labels = {}; self.label = None
-        self.current = None; self.skip = 0; self.link = None; self.links = []
+        self.current = None; self.skip = 0; self.link = None; self.links = []; self.language = None
 
     def handle_starttag(self, tag, attrs):
         a = dict(attrs)
+        if tag == "html":
+            self.language = a.get("lang", "")[:35]
         if tag in {'script', 'style', 'noscript'}:
             self.skip += 1
         if tag == 'label':
@@ -118,6 +122,7 @@ def inspect_offer(url):
                     page = context.new_page(); page.set_default_timeout(10000)
                     page.goto(resolved, wait_until='domcontentloaded', timeout=25000)
                     inventory = page.evaluate(INVENTORY)
+                    parser.language = page.locator('html').get_attribute('lang')
                     candidate = [field for field in inventory['fields'] if field.get('key') not in {'__proto__','prototype','constructor'}]
                     if any(field.get('type') in {'email', 'file'} for field in candidate):
                         fields, exact = candidate[:50], True
@@ -129,7 +134,7 @@ def inspect_offer(url):
             browser_error = tr('packets.the_application_form_could_not_be_read_check')
     if not exact:
         fields = fallback_fields()
-    return {'url': resolved, 'fields': fields, 'inspected': exact,
+    return {'url': resolved, 'fields': fields, 'inspected': exact, 'language': parser.language,
             'text': re.sub(r'\s+', ' ', ' '.join(parser.text))[:18000], 'warning': browser_error}
 
 
@@ -138,18 +143,27 @@ def facts(profile):
     return [line.strip(' •\t') for line in source.splitlines() if len(line.strip()) > 8][:220]
 
 
-def pdf_bytes(profile, role, summary, selected):
+def pdf_bytes(profile, role, summary, selected, language="en", template=None, cv_lines=None):
+    if template:
+        return resume.render_template(template, cv_lines if cv_lines is not None else [line["text"] for line in template["lines"]])
     from reportlab.lib import colors
-    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-    from reportlab.lib.enums import TA_LEFT
+    from reportlab.lib.styles import ParagraphStyle
     from reportlab.lib.pagesizes import A4
     from reportlab.pdfbase import pdfmetrics
     from reportlab.pdfbase.ttfonts import TTFont
-    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, KeepTogether
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
     font = Path(__file__).parent/'web/geist-variable.ttf'
     if 'CandidateGeist' not in pdfmetrics.getRegisteredFontNames():
         pdfmetrics.registerFont(TTFont('CandidateGeist', str(font)))
-    styles = getSampleStyleSheet()
+    labels = {
+        'en': ('Relevant achievements', 'Skills and strengths', 'Experience'),
+        'fr': ('Réalisations pertinentes', 'Compétences et points forts', 'Expérience'),
+        'de': ('Relevante Erfolge', 'Fähigkeiten und Stärken', 'Berufserfahrung'),
+        'es': ('Logros relevantes', 'Habilidades y fortalezas', 'Experiencia'),
+        'it': ('Risultati rilevanti', 'Competenze e punti di forza', 'Esperienza'),
+        'nl': ('Relevante resultaten', 'Vaardigheden en sterke punten', 'Ervaring'),
+        'pt': ('Realizações relevantes', 'Competências e pontos fortes', 'Experiência'),
+    }[language]
     base = ParagraphStyle('candidate', fontName='CandidateGeist', fontSize=9, leading=13, textColor=colors.HexColor('#262a30'), spaceAfter=5)
     title = ParagraphStyle('candidate-title', parent=base, fontSize=22, leading=26, spaceAfter=8)
     section = ParagraphStyle('candidate-section', parent=base, fontSize=11, leading=16, spaceBefore=12, spaceAfter=6)
@@ -161,16 +175,19 @@ def pdf_bytes(profile, role, summary, selected):
         story.append(Paragraph(f'<link href="{escape(profile["portfolio"])}">{escape(profile["portfolio"])}</link>', base))
     story.extend([Spacer(1, 8), Paragraph(escape(summary or profile['bio']), base)])
     if selected:
-        story.append(Paragraph(tr('packets.relevant_achievements'), section))
+        story.append(Paragraph(labels[0], section))
         story.extend(Paragraph('• ' + escape(text), base) for text in selected)
     if profile.get('strengths'):
-        story.extend([Paragraph(tr('packets.skills_and_strengths'), section), Paragraph(escape(profile['strengths']).replace('\n', '<br/>'), base)])
+        story.extend([Paragraph(labels[1], section), Paragraph(escape(profile['strengths']).replace('\n', '<br/>'), base)])
     if profile.get('cv_text'):
-        story.append(Paragraph(tr('packets.experience'), section))
+        story.append(Paragraph(labels[2], section))
         story.extend(Paragraph(escape(line), base) for line in profile['cv_text'].splitlines() if line.strip())
     out = io.BytesIO()
     SimpleDocTemplate(out, pagesize=A4, rightMargin=40, leftMargin=40, topMargin=35, bottomMargin=35,
                       title=profile['name']+' — '+role, author=profile['name']).build(story)
+    from pypdf import PdfReader
+    if len(PdfReader(io.BytesIO(out.getvalue())).pages) != 1:
+        raise ValueError(tr('resume.your_cv_is_too_long_for_one_readable_page'))
     return out.getvalue()
 
 
@@ -198,6 +215,12 @@ def prepare(workspace, providers, job_id, replace=False, expected_revision=None,
                 'text':job['audit'].get('description','')[:18000], 'warning':tr('packets.the_employer_s_page_could_not_be_read')}
         context_url = job['audit'].get('source_url') or job['url']
         context_basis = 'job_feed'
+    language = application_language(job, info)
+    info['language'] = language
+    template = resume.layout(workspace, profile)
+    cv_source = profile.get('cv_text','')
+    if not template and len(cv_source)>12000:
+        raise ValueError(tr('resume.shorten_your_source_cv_to_prepare_a_readable_one'))
     source_facts = []
     size = 0
     for fact in facts(profile):
@@ -215,11 +238,18 @@ def prepare(workspace, providers, job_id, replace=False, expected_revision=None,
             raise ValueError(tr('packets.the_summary_or_selected_facts_could_not_be'))
         if not isinstance(generated, dict) or any(key not in question_keys or not isinstance(text, str) or len(text) > 8000 for key, text in generated.items()):
             raise ValueError(tr('packets.the_suggested_answers_could_not_be_used_your'))
+        check_output(summary,language)
+        for answer in generated.values():check_output(answer,language)
+        resume.validate_text(result,profile,language,template,selected,require_template=True)
         for key in ('company_summary', 'product_summary', 'team_summary'):
             if not isinstance(result.get(key), str) or len(result[key]) > 3000:
                 raise ValueError(tr('packets.the_company_brief_could_not_be_read_check'))
+            check_output(result[key],'en')
     result = providers.complete('prepare_application', {
-        'instruction': 'Return JSON: summary (short factual candidate summary), selected_facts (up to 5 integer indices from facts), company_summary (only from offer text; say unknown when missing), product_summary, team_summary (unknown if absent), answers (object question-key to answer string). Never answer consents or demographic questions. Facts selected for the CV remain verbatim. No invented accomplishments or product familiarity.',
+        'output_languages': policy(language),
+        'cv_template_lines': [{'text':line['text'],'width_points':round(line['width'],1),'font_size':round(line['size'],1)} for line in template['lines']] if template else None,
+        'source_cv': cv_source[:12000] if not template else None,
+        'instruction': 'Return JSON: summary (short factual candidate summary), selected_facts (up to 5 integer indices from facts), company_summary (only from offer text; say unknown when missing), product_summary, team_summary (unknown if absent), answers (object question-key to answer string). Never answer consents or demographic questions. Selected fact indices refer to unchanged source facts. No invented accomplishments or product familiarity. Also return cv_lines when cv_template_lines is present: one faithfully translated/adapted string per source line, in the same order, preserving names, dates, numbers and all experiences, without adding or omitting lines. Keep each line concise enough for its width and font size. Otherwise return cv: {role: translated target role title, text: full translated source CV preserving its sections and all facts, strengths: translated strengths, selected: faithful translations of selected facts in index order}. All CV text uses the application_language, including headings. The summary and answers are employer-facing; company/product/team briefs are app information.',
         'profile': {key: profile.get(key) for key in ('bio', 'strengths', 'expectations')},
         'facts': source_facts[:120], 'offer': {'company': job['company'], 'role': job['role'], 'text': info['text'][:12000]},
         'questions': [{'key': field['key'], 'label': field['label'][:1500]} for field in text_fields]}, max_output=4000, validator=validate)
@@ -229,7 +259,9 @@ def prepare(workspace, providers, job_id, replace=False, expected_revision=None,
         raise ValueError(tr('packets.your_profile_or_application_changed_during_preparation_start'))
     folder = store.root/'data/dossiers'/job_id/('ai-'+uuid.uuid4().hex); folder.mkdir(parents=True, exist_ok=True)
     path = str((folder/'resume.pdf').relative_to(store.root))
-    pdf = pdf_bytes(profile, job['role'], summary, [source_facts[i] for i in selected])
+    cv=result.get('cv',{})
+    pdf_profile={**profile,'cv_text':cv.get('text',profile.get('cv_text','')),'strengths':cv.get('strengths',profile.get('strengths',''))}
+    pdf = pdf_bytes(pdf_profile, cv.get('role',job['role']), summary, cv.get('selected',[source_facts[i] for i in selected]), language, template, result.get('cv_lines'))
     answers = {}
     for field in info['fields']:
         key, label, kind = field['key'], field.get('label', '').casefold(), field.get('type')
@@ -258,10 +290,10 @@ def prepare(workspace, providers, job_id, replace=False, expected_revision=None,
     # Source/form retrieval is not proof of geographic eligibility or of an open position.
     (folder/'resume.pdf').write_bytes(pdf)
     (folder/'resume.json').write_text(json.dumps({'profile_revision': profile['revision'], 'summary': summary, 'selected_facts': [source_facts[i] for i in selected]}, ensure_ascii=False))
-    (folder/'tailoring.json').write_text(json.dumps({'source': info['url'], 'exact_form': info['inspected'], 'facts_verbatim': True}, ensure_ascii=False))
+    (folder/'tailoring.json').write_text(json.dumps({'source': info['url'], 'exact_form': info['inspected'], 'facts_verbatim': not bool(result.get('cv') or template), 'application_language': language, 'template': profile.get('cv_template')}, ensure_ascii=False))
     (folder/'motivation.txt').write_text(next(iter(generated.values()), ''))
     store.save(job_id, {'answers': answers, 'motivation': '', 'missing': missing,
-        'form': {key: value for key, value in info.items() if key in {'url', 'fields', 'inspected'}},
+        'form': {key: value for key, value in info.items() if key in {'url', 'fields', 'inspected', 'language'}},
         'attachments': [{'label': tr('portable.cv_draft'), 'path': path}],
         'submission': {'mode': 'manual', 'reason': tr('packets.complete_and_send_this_application_on_the_employer')}}, job['revision'], expected_updated_at=job['updated_at'], audit=audit)
     workspace.preparation(job_id, 'ready', tr('packets.your_materials_are_ready_to_review_check_any'))

@@ -35,7 +35,7 @@ Open Vitæ is a native Mac shell around a local web application. The interface t
 | Local service | Python 3.11+, FastAPI, Uvicorn | Workspace operations, job discovery, preparation and provider integration |
 | Interface | HTML, CSS, vanilla JavaScript, Geist | Onboarding, job review, document editing and application tracking |
 | Storage | SQLite and local files | Profiles, jobs, activity history, document versions and backups |
-| Documents | ReportLab, pypdf, standard-library DOCX/TXT parsing | PDF export and text imports; scanned PDFs require OCR elsewhere |
+| Documents | ReportLab, pypdf, pdfplumber, standard-library DOCX/TXT parsing | One-page PDF export, imported PDF layouts and text imports; scanned PDFs require OCR elsewhere |
 | Browser automation | Playwright and Chromium | Read public employer pages and inspect forms; never submit applications |
 | Optional AI | Official Codex app-server, Anthropic API, Google Gemini API | Assistance using the candidate’s chosen provider |
 | Packaging | PyInstaller, native Swift shell; Sparkle for release updates | Bundle the Python runtime and desktop dependencies |
@@ -43,6 +43,14 @@ Open Vitæ is a native Mac shell around a local web application. The interface t
 | Checks | Python unittest, Node test runner, Playwright | Service tests, interface logic and browser journeys |
 
 There is no React build pipeline or Node runtime requirement for the application or website. Node is used for JavaScript tests. See the [architecture and code map](docs/ARCHITECTURE.md) for module boundaries and data flow.
+
+## Languages and CV layout
+
+Explanations, company briefs and AI revision notes follow the app language (currently English). CVs and application answers follow the employer’s form language, detected from its questions, page language or listing. English is the fallback when detection is inconclusive. Override ambiguous detection with **Edit job → Application language**. English, French, German, Spanish, Italian, Dutch and Portuguese are supported. Imported source material stays unchanged; prepare a new version to update older drafts.
+
+Import a **one-page text PDF** to reuse its page layout, graphics, text positions, sizes and colors. The original is stored privately and never overwritten. Adaptation translates or rephrases each text zone without adding experiences. Standard PDF fonts and embedded TrueType fonts are reused when available; unsupported fonts or missing glyphs use Geist. Complex/rotated layouts can require a simpler source PDF. Review every exported version, especially tightly spaced or mixed-style lines.
+
+DOCX, TXT and multi-page PDFs remain text imports; they do not preserve their original layout. Export them to a one-page PDF first to use them as a layout template. Without a PDF template, the app uses its simple CV layout. **Every successful generated CV has exactly one page.** Exports that would overflow or need illegible text fail with an explanation, rather than silently dropping content. Shorten the source or use a roomier template and try again. Offline/manual drafts cannot translate by themselves; integrated or portable AI preparation can translate the CV, with human review.
 
 ## AI on your terms
 
