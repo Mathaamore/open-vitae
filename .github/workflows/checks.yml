@@ -9,7 +9,7 @@ jobs:
       matrix:
         python: ['3.11', '3.12']
     env:
-      JOB_AGENT_ROOT: ${{ runner.temp }}/open-vitae-tests
+      JOB_AGENT_ROOT: /tmp/open-vitae-tests
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -25,7 +25,7 @@ jobs:
   product-journey:
     runs-on: ubuntu-latest
     env:
-      JOB_AGENT_ROOT: ${{ runner.temp }}/open-vitae-ui
+      JOB_AGENT_ROOT: /tmp/open-vitae-ui
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
