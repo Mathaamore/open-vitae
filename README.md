@@ -10,9 +10,13 @@ Introduce yourself, import your CV and explore job suggestions. Keep the offers 
 
 ![Example workspace with a fictional candidate and jobs](docs/images/workspace.png)
 
-The app has no paywall or hosted account. AI usage comes from your own provider account or API project and may cost money.
+The app works without internet, accounts or AI keys for profiles, CVs, saved jobs, drafts and tracking. Online discovery and integrated AI are optional. AI usage comes from your own provider account or API project and may cost money.
 
 ## What it does
+
+- Add any job from a URL, pasted description or manual fields. Keep URL-only imports for later, edit opportunities and organize favorites in the same tracker.
+- Generate editable local CV/application drafts without AI; export private JSON or a workspace backup.
+- Use any compatible external AI: generate a contextual prompt, copy it yourself, then preview and confirm a versioned JSON result. [Portable AI format and offline workflow](docs/PORTABLE_AI.md).
 
 - Resumable local onboarding with experience, strengths, motivations and search criteria. Import text PDFs, DOCX or TXT; scanned PDFs need OCR elsewhere.
 - Search public feeds from Himalayas and Arbeitnow, plus up to six configured employer boards (Greenhouse, Lever, Ashby), with source attribution and original links.
@@ -48,7 +52,7 @@ python3 -m venv .venv
 .venv/bin/python -m job_agent.main
 ```
 
-Open **http://127.0.0.1:8765**. Connect a provider, complete your profile and search. ChatGPT requires the official Codex CLI on PATH when running from source; Claude and Gemini require a working OS keyring. Tests use fake providers and do not require keys.
+Open **http://127.0.0.1:8765**. Choose **Commencer sans compte ni IA**, complete your profile and add an offer. Connect a provider later if you want integrated assistance. ChatGPT requires the official Codex CLI on PATH when running from source; Claude and Gemini require a working OS keyring. Tests use fake providers and do not require keys.
 
 The default Mac workspace is `~/Library/Application Support/Candidatures`; the historical directory name is retained for compatibility. On Linux the service uses `$XDG_DATA_HOME/candidatures` or `~/.local/share/candidatures`. To use a separate development space:
 
@@ -68,7 +72,7 @@ The French static landing page lives in [`site/`](site/README.md). Deploy to Ver
 
 ## Privacy
 
-Profiles, SQLite records and generated documents stay in the selected workspace. Requested context is sent to the chosen AI provider; public job feeds receive role/query terms and optional country filtering, not the CV. External employer sites are read anonymously to inspect forms. No telemetry is included.
+Profiles, SQLite records and generated documents stay in the selected workspace. Requested context is sent to the chosen AI provider; public job feeds receive role/query terms and optional country filtering, not the CV. Employer metadata retrieval is an explicit optional action. Integrated preparation can read public employer pages anonymously to inspect forms. Portable prompts may contain CV details: review them before sharing with an external AI. No telemetry is included.
 
 Provider credentials stay in the OS keyring or isolated Codex session. The app does not copy credentials from another app. Disconnecting a provider does not delete dossiers. The local service must not be exposed publicly; see [SECURITY.md](SECURITY.md).
 
@@ -80,6 +84,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for setup and review expectations, [archi
 .venv/bin/python -m unittest discover -s tests -q
 node --test tests/test_web.js
 .venv/bin/python scripts/check_product_ui.py
+.venv/bin/python scripts/check_offline_ui.py
 .venv/bin/python scripts/check_landing_ui.py
 # After staging, inspect what Git would publish:
 .venv/bin/python scripts/check_repository.py

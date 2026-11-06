@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "type": "job_analysis",
+  "context": {
+    "profile_revision": 1,
+    "job_id": "example",
+    "job_revision": 0,
+    "job_updated_at": "example"
+  },
+  "data": {
+    "summary": "Analyse à relire",
+    "strengths": [
+      "Un lien avec les faits"
+    ],
+    "uncertainties": [
+      "Éligibilité à vérifier"
+    ],
+    "sources": [
+      "https://example.com/jobs/python"
+    ]
+  }
+}

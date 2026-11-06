@@ -49,3 +49,9 @@
  .brand-wordmark{filter:brightness(0) invert(1)}.product-mark{background:#d8eda2}.person-initial{background:var(--surface);color:var(--ink)}
  .context-copy p,.offer-excerpt,.chat-message p{color:var(--muted)}.quiet{background:transparent;color:var(--muted)}
 }
+/* Local creation and portable AI reuse the workspace's type, surface and focus tokens. */
+#tools-screen{padding-top:32px}.portable-layout{display:grid;grid-template-columns:1fr 1fr;gap:32px}.portable-step{min-width:0}.portable-step h2{margin-bottom:24px}.portable-step h3,.portable-step details{margin-top:24px}.portable-step summary{cursor:pointer;font-weight:500}.portable-actions{display:flex;flex-wrap:wrap;gap:8px;margin:16px 0}.portable-result{white-space:pre-wrap;overflow-wrap:anywhere;max-height:400px;overflow:auto;background:var(--surface);padding:16px;border-radius:8px;font:400 14px/20px Geist,sans-serif;margin:16px 0}.portable-step .cv-drop{cursor:pointer}.portable-step textarea{margin-top:8px}#manual-job-dialog{width:min(760px,calc(100vw - 32px));max-height:calc(100dvh - 48px);overflow:auto;background:var(--paper);color:var(--ink);padding:24px;border:1px solid var(--line);border-radius:12px}#manual-job-dialog::backdrop{background:#24282e66}.sidebar>#add-job{margin:24px 0 8px}.portable-step>.data-note{margin-bottom:16px}#continue-local{margin-bottom:16px}
+@media(max-width:1000px){.portable-layout{grid-template-columns:1fr;gap:40px}}
+@media(max-width:760px){.view-tabs{overflow-x:auto;justify-content:flex-start;gap:16px;max-width:100%}.view-tabs button{flex-shrink:0}.offer-choices{flex-wrap:wrap}.workspace-nav{flex-wrap:wrap;gap:16px}.sidebar>#add-job{margin:8px 0}.sidebar>.brand{margin-right:8px}}
+
+.job-description{white-space:pre-line;overflow-wrap:anywhere;margin:12px 0 24px}

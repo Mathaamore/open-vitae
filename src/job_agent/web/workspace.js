@@ -102,11 +102,11 @@
   function go(screen) {
     if (typeof dirty !== 'undefined' && dirty) { message('Enregistre ou annule tes modifications avant de changer de vue.', true); return false; }
     if (current) home();
-    ['explore','dashboard','settings-screen'].forEach(id => el(id).hidden = id !== screen);
+    ['explore','dashboard','settings-screen','tools-screen'].forEach(id => el(id).hidden = id !== screen);
     el('review').hidden = true;
     document.querySelectorAll('[data-screen]').forEach(button => { if (button.dataset.screen === screen) button.setAttribute('aria-current','page'); else button.removeAttribute('aria-current'); });
-    el('screen-title').textContent = {explore:'Recherche',dashboard:'Candidatures','settings-screen':'Connexion et usage'}[screen];
-    message(''); if (screen === 'settings-screen') loadSettings(); window.scrollTo(0,0); return true;
+    el('screen-title').textContent = {explore:'Recherche',dashboard:'Candidatures','settings-screen':'Connexion et usage','tools-screen':'Utiliser mon IA'}[screen];
+    message(''); if(screen==='tools-screen')window.LocalTools?.enter(); if (screen === 'settings-screen') loadSettings(); window.scrollTo(0,0); return true;
   }
   function note(text, role) { const node = document.createElement('div'); node.className = 'chat-message ' + role; const label = document.createElement('span'); label.className='sr-only';label.textContent=role==='user'?'Toi : ':'Assistant : '; const body=document.createElement('p');body.textContent=text;node.append(label,body);el('chat-log').append(node); }
   async function loadChat() {
@@ -114,7 +114,7 @@
     el('chat-log').scrollTop = el('chat-log').scrollHeight;
   }
   async function sendChat(event) {
-    event.preventDefault(); const text=el('chat-input').value.trim();if (!text || chatBusy) return;
+    event.preventDefault(); if(!bootstrap.connection.connected){window.LocalTools.open('profile_analysis');message('Crée un prompt local pour ton IA, ou connecte un fournisseur depuis Connexion et usage.');return;} const text=el('chat-input').value.trim();if (!text || chatBusy) return;
     chatBusy=true;el('chat-send').disabled=true;el('chat-input').value='';el('chat-empty').hidden=true;note(text,'user');
     const pending=document.createElement('p');pending.className='chat-pending';pending.textContent='Réflexion en cours…';pending.setAttribute('role','status');el('chat-log').append(pending);
     try { const result=await api('/api/chat',{method:'POST',body:JSON.stringify({text})});note(result.text,'assistant');if(result.offers)offers({offers:result.offers});if(result.proposed_preferences)proposePreferences(result.proposed_preferences,result.profile_revision); }
@@ -134,7 +134,7 @@
     const location=typeof offer.location==='string'?offer.location:offer.location?.name||'Lieu à confirmer';
     const salary=typeof offer.salary==='string'?offer.salary:offer.salary?.salary_display||'Salaire à confirmer';
     const url=offer.source_url?.startsWith('https://')?offer.source_url:offer.url;
-    return `<article class="offer-suggestion"><div class="offer-company"><span>${esc(offer.company)}</span><a href="${esc(offer.url)}" target="_blank" rel="noopener noreferrer" aria-label="Voir l’annonce ${esc(offer.company)}">↗</a></div><h3>${esc(offer.role)}</h3><p class="offer-conditions">${esc(location)}<span aria-hidden="true"> · </span>${esc(salary)}</p>${offer.description?`<p class="offer-excerpt">${esc(offer.description)}</p>`:''}<ul class="match-reasons">${offer.reasons.map(reason=>`<li>${esc(reason)}</li>`).join('')}</ul><details class="offer-checks"><summary>À vérifier avant de postuler</summary><ul>${offer.checks.map(check=>`<li>${esc(check)}</li>`).join('')}</ul></details><div class="offer-choices"><button class="primary" data-interest="accept" data-id="${esc(offer.id)}">Ça m’intéresse <span aria-hidden="true">→</span></button><button class="quiet" data-interest="reject" data-id="${esc(offer.id)}">Passer</button><label class="rejection-reason"><span class="sr-only">Motif pour affiner la recherche</span><select data-reason="${esc(offer.id)}" aria-label="Motif du refus pour ${esc(offer.company)}"><option value="">Un motif ?</option><option value="role">Le poste</option><option value="location">Le lieu</option><option value="salary">Le salaire</option><option value="company">L’entreprise</option></select></label></div><p class="offer-source">Source : <a href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(offer.source)}</a> · ${offer.published_at?'Publié le '+esc(date(offer.published_at)):'Date de publication inconnue'}</p></article>`;
+    return `<article class="offer-suggestion"><div class="offer-company"><span>${esc(offer.company)}</span><a href="${esc(offer.url)}" target="_blank" rel="noopener noreferrer" aria-label="Voir l’annonce ${esc(offer.company)}">↗</a></div><h3>${esc(offer.role)}</h3><p class="offer-conditions">${esc(location)}<span aria-hidden="true"> · </span>${esc(salary)}</p>${offer.description?`<p class="offer-excerpt">${esc(offer.description)}</p>`:''}<ul class="match-reasons">${offer.reasons.map(reason=>`<li>${esc(reason)}</li>`).join('')}</ul><details class="offer-checks"><summary>À vérifier avant de postuler</summary><ul>${offer.checks.map(check=>`<li>${esc(check)}</li>`).join('')}</ul></details><div class="offer-choices"><button class="primary" data-interest="accept" data-id="${esc(offer.id)}">Ça m’intéresse <span aria-hidden="true">→</span></button><button class="quiet" data-interest="later" data-id="${esc(offer.id)}">Garder</button><button class="quiet" data-interest="reject" data-id="${esc(offer.id)}">Passer</button><label class="rejection-reason"><span class="sr-only">Motif pour affiner la recherche</span><select data-reason="${esc(offer.id)}" aria-label="Motif du refus pour ${esc(offer.company)}"><option value="">Un motif ?</option><option value="role">Le poste</option><option value="location">Le lieu</option><option value="salary">Le salaire</option><option value="company">L’entreprise</option></select></label></div><p class="offer-source">Source : <a href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(offer.source)}</a> · ${offer.published_at?'Publié le '+esc(date(offer.published_at)):'Date de publication inconnue'}</p></article>`;
   }
   function offers(data) {
     const items=data.offers||[];el('recommendation-count').textContent=items.length?String(items.length):'';
@@ -154,7 +154,7 @@
   async function interest(button) {
     const identity=button.dataset.id,decision=button.dataset.interest;button.disabled=true;
     const reason=[...document.querySelectorAll('[data-reason]')].find(node=>node.dataset.reason===identity)?.value||'';
-    try {await api('/api/jobs/'+encodeURIComponent(identity)+'/interest',{method:'POST',body:JSON.stringify({decision,reason})});await Promise.all([loadOffers(),refreshJobs()]);message(decision==='accept'?'Offre retenue. La préparation apparaîtra dans Candidatures.':'Offre écartée. Le motif, si tu en as choisi un, affine la sélection.');if(decision==='reject'){
+    try {await api('/api/jobs/'+encodeURIComponent(identity)+'/interest',{method:'POST',body:JSON.stringify({decision,reason})});await Promise.all([loadOffers(),refreshJobs()]);message(decision==='later'?'Offre conservée dans tes favoris.':decision==='accept'?'Offre retenue. La préparation apparaîtra dans Candidatures.':'Offre écartée. Le motif, si tu en as choisi un, affine la sélection.');if(decision==='reject'){
       const undo=document.createElement('button');undo.textContent='Annuler';undo.className='undo-button';
       undo.onclick=async()=>{undo.disabled=true;try{await api('/api/jobs/'+encodeURIComponent(identity)+'/interest',{method:'POST',body:JSON.stringify({decision:'reset'})});await Promise.all([loadOffers(),refreshJobs()]);message('Choix annulé. Cette offre est à nouveau dans la sélection.');}catch(error){message(error.message,true);}};
       el('message').append(undo);
@@ -173,7 +173,7 @@
   }
   function updateProfileDisplay(){
     el('profile-name').textContent=profile.name||'Ton profil';el('profile-initial').textContent=(profile.name||'C').slice(0,1).toUpperCase();
-    el('provider-indicator').textContent=bootstrap.connection.name||'IA connectée';
+    el('provider-indicator').textContent=bootstrap.connection.name||'Mode local · IA facultative';
     el('criteria-summary').textContent=[...(profile.roles||[]),...(profile.locations||[]),{remote:'Télétravail',hybrid:'Hybride',office:'Sur place',flexible:'Organisation flexible'}[profile.remote]].filter(Boolean).join(' · ');
   }
   async function start(){
@@ -182,6 +182,7 @@
   }
   function bind(){
     document.querySelectorAll('[data-provider]').forEach(button=>button.onclick=()=>providerChoice(button.dataset.provider));el('connect-provider').onclick=connect;el('connection-check').onclick=checkConnection;
+    el('continue-local').onclick=async()=>{try{await api('/api/providers/local',{method:'POST',body:'{}'});bootstrap=await api('/api/bootstrap');profile=bootstrap.profile||{};if(bootstrap.onboarded)activate();else editProfile();}catch(error){gateMessage(error.message,true);}};
     el('return-workspace').onclick=()=>activate();el('cv-upload').onchange=()=>importCV();
     const drop=document.querySelector('.cv-drop');
     drop.ondragover=event=>{event.preventDefault();drop.classList.add('drag-over');};
@@ -192,14 +193,14 @@
     el('profile-next').onclick=()=>{const visible=document.querySelector(`[data-profile-step="${step}"]`);if([...visible.querySelectorAll('input,textarea,select')].every(field=>field.reportValidity()))profileStep(step+1);};
     el('profile-previous').onclick=()=>profileStep(step-1);el('profile-cancel').onclick=()=>{window.profileDirty=false;fillProfile(profile);activate();};
     document.querySelectorAll('[data-screen]').forEach(button=>button.onclick=()=>go(button.dataset.screen));el('profile-open').onclick=editProfile;el('settings-profile').onclick=editProfile;
-    el('provider-change').onclick=()=>showConnection(true);el('provider-disconnect').onclick=async()=>{try{await api('/api/providers/disconnect',{method:'POST',body:'{}'});showConnection();}catch(error){message(error.message,true);}};
+    el('provider-change').onclick=()=>showConnection(true);el('provider-disconnect').onclick=async()=>{try{await api('/api/providers/disconnect',{method:'POST',body:'{}'});bootstrap.connection={connected:false,name:'Mode local · IA facultative'};updateProfileDisplay();activate();}catch(error){message(error.message,true);}};
     el('save-source-boards').onclick=async()=>{try{const boards=el('source-boards').value.split('\n').map(value=>value.trim()).filter(Boolean);await api('/api/sources',{method:'PUT',body:JSON.stringify({boards})});message('Sources enregistrées. La prochaine recherche les consultera.');}catch(error){message(error.message,true);}};
     el('save-daily-limit').onclick=async()=>{try{await api('/api/usage',{method:'PUT',body:JSON.stringify({limit:Number(el('daily-limit').value)})});await loadUsage();message('Limite quotidienne enregistrée.');}catch(error){message(error.message,true);}};
     el('chat-form').onsubmit=sendChat;['first-search','search-offers','refresh-offers'].forEach(id=>el(id).onclick=search);
     el('recommendations-list').onclick=event=>{const button=event.target.closest('[data-interest]');if(button)interest(button);};
     document.addEventListener('click',event=>{const button=event.target.closest('[data-retry-preparation]');if(button){button.dataset.id=button.dataset.retryPreparation;button.dataset.interest='accept';interest(button);}});
   }
-  async function boot(){bind();bootstrap=await api('/api/bootstrap');profile=bootstrap.profile||{};if(bootstrap.connection.connected&&bootstrap.onboarded){el('welcome').hidden=true;el('workspace-root').hidden=false;return true;}
+  async function boot(){bind();bootstrap=await api('/api/bootstrap');profile=bootstrap.profile||{};if(bootstrap.onboarded){el('welcome').hidden=true;el('workspace-root').hidden=false;return true;}
     const pending=new Promise(resolve=>readyResolve=resolve);if(bootstrap.connection.connected)editProfile();else{showConnection();if(bootstrap.connection.error)gateMessage(bootstrap.connection.error,true);}return pending;}
   window.WorkspaceUI={boot,start,go,openSettings:()=>go('settings-screen'),showConnection,editProfile};
 })();

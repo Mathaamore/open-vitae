@@ -150,10 +150,10 @@ class Store:
             ids.append(job_id)
             company = item.get('company') or item.get('entreprise')
             role = item.get('role') or item.get('title') or item.get('poste')
-            url = item.get('url') or item.get('official_url') or item.get('url_officielle') or item.get('lien')
-            if not all(isinstance(v, str) and v.strip() for v in (company, role, url)):
+            url = item.get('url') or item.get('official_url') or item.get('url_officielle') or item.get('lien') or ''
+            if not all(isinstance(v, str) and v.strip() for v in (company, role)) or not isinstance(url,str) or not url and item.get('manual') is not True:
                 raise ValueError(f'{job_id}: company, role and official url required; source keys: {list(item)}')
-            if not url.startswith('https://'):
+            if url and not url.startswith('https://'):
                 raise ValueError(f'{job_id}: official HTTPS URL required')
             normalized.append((job_id, canonical(item), company, role, url, now()))
         with self.db() as db:
@@ -213,16 +213,16 @@ class Store:
                 problems.append('Sélectionner exactement ' + str(field['selection_count']) + ' choix : ' + field['label'])
         return problems
 
-    def save(self, job_id, dossier, revision):
+    def save(self, job_id, dossier, revision, expected_updated_at=None):
         # Validate artifacts before opening the transaction; they are rehashed on approval and send.
         for entry in dossier.get('attachments', []):
             artifact(self.root, entry['path'])
         with self.db() as db:
             db.execute('BEGIN IMMEDIATE')
-            row = db.execute('SELECT status,revision,dossier,approved_hash FROM jobs WHERE id=?', (job_id,)).fetchone()
+            row = db.execute('SELECT status,revision,dossier,approved_hash,updated_at FROM jobs WHERE id=?', (job_id,)).fetchone()
             if row is None or row['status'] in LOCKED:
                 raise ValueError('Opportunity locked; uncertain sends must be reconciled manually')
-            if row['revision'] != revision:
+            if row['revision'] != revision or expected_updated_at is not None and row['updated_at'] != expected_updated_at:
                 raise ValueError('Dossier changed in another tab; reload before saving')
             if row['dossier'] == canonical(dossier) and (not row['approved_hash'] or row['approved_hash'] == self.get(job_id)['fingerprint']):
                 return
@@ -277,7 +277,7 @@ class Store:
                 mismatch = False
                 try:
                     parsed = urlparse(form.get('url',job['url']))
-                    target = parsed.netloc.lower() + '/' + form['applicationId'] if form.get('applicationId') else parsed.netloc.lower() + parsed.path.rstrip('/').removesuffix('/application')
+                    target = parsed.netloc.lower() + '/' + form['applicationId'] if form.get('applicationId') else (parsed.netloc.lower() + parsed.path.rstrip('/').removesuffix('/application') if parsed.netloc else 'local:'+job_id)
                     db.execute('INSERT INTO attempts(job_id,dossier_hash,state,receipt,created_at,target) VALUES(?,?,?,?,?,?)', (job_id, job['fingerprint'], 'SUBMITTING', None, now(),target))
                 except sqlite3.IntegrityError:
                     raise ValueError('An attempt already exists; duplicate prohibited') from None
@@ -320,7 +320,7 @@ class Store:
                     raise ValueError('Le dossier a changé : recharge et relis la version actuelle')
                 form = job['dossier']['form']
                 parsed = urlparse(form.get('url',job['url']))
-                target = parsed.netloc.lower() + '/' + form['applicationId'] if form.get('applicationId') else parsed.netloc.lower() + parsed.path.rstrip('/').removesuffix('/application')
+                target = parsed.netloc.lower() + '/' + form['applicationId'] if form.get('applicationId') else (parsed.netloc.lower() + parsed.path.rstrip('/').removesuffix('/application') if parsed.netloc else 'local:'+job_id)
                 receipt = {'confirmation':confirmation.strip(),'verified_by':'user','checked_at':now()}
                 try:
                     db.execute('INSERT INTO attempts(job_id,dossier_hash,state,receipt,created_at,target) VALUES(?,?,?,?,?,?)',

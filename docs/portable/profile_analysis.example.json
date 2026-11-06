@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "type": "profile_analysis",
+  "context": {
+    "profile_revision": 1
+  },
+  "data": {
+    "summary": "Synthèse à relire",
+    "strengths": [
+      "Un point documenté"
+    ],
+    "uncertainties": [
+      "Un point à confirmer"
+    ]
+  }
+}

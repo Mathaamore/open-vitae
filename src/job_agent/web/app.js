@@ -16,7 +16,8 @@ function displayStatus(job) {
 }
 function matchesFilter(job, filter) {
   if (filter === 'all') return true;
-  if (filter === 'tracked') return job.revision > 0 || job.interest === 'accept' || job.status === 'SUBMITTED';
+  if (filter === 'tracked') return job.revision > 0 || ['accept','later'].includes(job.interest) || job.status === 'SUBMITTED';
+  if (filter === 'saved') return job.interest === 'later';
   if (filter === 'dossiers') return job.interest === 'accept' && !job.revision || job.revision > 0 && job.status === 'NEEDS_INPUT';
   if (filter === 'ready') return job.status === 'APPLICATION_READY';
   if (filter === 'sent') return job.status === 'SUBMITTED';
@@ -34,7 +35,7 @@ function eventDetails(event) { try { return JSON.parse(event.details); } catch {
 async function api(path, options = {}) {
   const response = await fetch(path, {...options, headers:{'Content-Type':'application/json', 'X-Local-Token':token, ...options.headers}});
   const result = await response.json();
-  if (!response.ok) { if (result.gate === 'connection' && window.WorkspaceUI) window.WorkspaceUI.showConnection(); throw Error(result.error || 'Opération impossible. Recharge la page et réessaie.'); }
+  if (!response.ok) { throw Error(result.error || 'Opération impossible. Recharge la page et réessaie.'); }
   return result;
 }
 function message(text, error = false) {
@@ -70,7 +71,7 @@ function table() {
 }
 function updateViews() {
   const headings = {all:['Candidatures','Les offres que tu as retenues et tes dossiers en préparation.'],dossiers:['À préparer','Les dossiers qui demandent encore ton attention.'],ready:['À relire','CV et réponses préparés. Relis les faits avant de postuler.'],sent:['Envoyées','Les candidatures dont tu as enregistré l’envoi.']};
-  const [title, description] = headings[selectedView];
+  const [title, description] = headings[selectedView] || ['Favoris', 'Les offres conservées pour plus tard.'];
   $('#dashboard-title').innerHTML = title;
   $('#view-description').textContent = description;
   document.querySelectorAll('[data-view]').forEach(button => {
@@ -124,8 +125,8 @@ function verification(job) {
 }
 function offer(job) {
   const audit = job.audit, criteria = {technical:'Technique et expérience', ownership:'Autonomie et produit', growth:'Progression technique', remote:'Organisation du travail', compensation:'Rémunération', culture:'Culture engineering'};
-  return `${companyContext(job)}${verification(job)}<div class="context"><div><small>Rémunération publiée</small><strong>${esc(salary(job))}</strong></div><div><small>Lieu de travail</small><strong>${esc(locationText(job))}</strong></div><div><small>Compatibilité géographique</small><strong>${(audit.location_allowed ?? audit.france_allowed) === true ? 'Confirmée' : (audit.location_allowed ?? audit.france_allowed) === false ? 'Incompatible' : 'À confirmer'}</strong></div><div><small>Dernière vérification</small><strong>${date(audit.checked_at)}</strong></div></div>
-    <div class="offer-details">${audit.blockers?.length ? `<div class="notice"><strong>Points bloquants identifiés</strong><ul>${audit.blockers.map(text => `<li>${esc(text)}</li>`).join('')}</ul></div>` : ''}
+  return `${companyContext(job)}${verification(job)}<div class="context"><div><small>Rémunération publiée</small><strong>${esc(salary(job))}</strong></div><div><small>Lieu de travail</small><strong>${esc(locationText(job))}</strong></div><div><small>Compatibilité géographique</small><strong>${(audit.location_allowed ?? audit.france_allowed) === true ? 'Confirmée' : (audit.location_allowed ?? audit.france_allowed) === false ? 'Incompatible' : 'À confirmer'}</strong></div><div><small>Collecte ou modification</small><strong>${date(audit.checked_at)}</strong></div></div>
+    <div class="offer-details">${audit.description?`<section><h3>Description fournie · à vérifier</h3><p class="job-description">${esc(audit.description)}</p></section>`:''}${audit.source?`<p class="footnote">Origine : ${esc(audit.source)}${audit.source_url?.startsWith('https://')?` · <a href="${esc(audit.source_url)}" target="_blank" rel="noopener noreferrer">Source originale ↗</a>`:''}</p>`:''}${audit.blockers?.length ? `<div class="notice"><strong>Points bloquants identifiés</strong><ul>${audit.blockers.map(text => `<li>${esc(text)}</li>`).join('')}</ul></div>` : ''}
     ${audit.requirements?.length ? `<h3>Ce qu’ils recherchent</h3><ul>${audit.requirements.map(text => `<li>${esc(text)}</li>`).join('')}</ul>` : ''}
     ${audit.warnings?.length ? `<details><summary>Points à vérifier (${audit.warnings.length})</summary><ul>${audit.warnings.map(text => `<li>${esc(text)}</li>`).join('')}</ul></details>` : ''}
     <details><summary>Comprendre le score · ${job.coverage ? job.score + '/100' : 'à évaluer'}</summary><p class="footnote">${job.coverage} % des critères sont documentés. Les critères inconnus n’ajoutent aucun point.</p>${Object.entries(audit.scores || {}).map(([key, value]) => `<div class="score-row"><strong>${esc(criteria[key] || key)}</strong><span>${value.value ?? '—'}/100</span><span>${esc(value.reason)}</span></div>`).join('') || '<p class="footnote">Évaluation en attente de sources.</p>'}</details>
@@ -157,7 +158,7 @@ function dossier(job, data) {
     ${form.fields.map((item, index) => field(item, data.answers, index, readonly)).join('')}
     <details class="additional-motivation"><summary>Motivation complémentaire</summary><label class="field"><span class="field-heading">Un texte de motivation réutilisable</span><textarea id="motivation" rows="6" ${readonly ? 'readonly' : ''}>${esc(data.motivation)}</textarea><small>${data.submission.mode === 'email' ? 'Le brouillon utilise ton message ci-dessus, pas ce texte complémentaire.' : 'À utiliser si une courte motivation est demandée sur le site.'}</small></label></details>
     ${!readonly ? '<div class="review-footer"><button class="primary" id="save" disabled>Enregistrer les réponses</button><button class="quiet" id="discard" hidden>Annuler les modifications</button><p id="save-state">Tes réponses sont enregistrées. Aucun envoi automatique.</p></div>' : ''}
-    <div class="delivery-card"><h3>Pour postuler</h3>${data.submission.mode === 'email' ? `<p>Ouvre le brouillon dans ta messagerie, vérifie le destinataire et le CV joint, puis envoie-le toi-même.</p><p class="recipient">${esc(data.submission.recipient || '')}</p><a class="button-link" href="${base}/email">Télécharger le brouillon .eml ↓</a>` : `<p>Copie les réponses, télécharge ton CV et termine sur le site de l’entreprise.</p><a class="button-link" href="${esc(job.url)}" target="_blank" rel="noopener noreferrer">Ouvrir le formulaire officiel ↗</a>`}<p class="footnote">Après l’envoi, utilise « J’ai postulé » pour mettre ton suivi à jour.</p></div></div></div>`;
+    <div class="delivery-card"><h3>Pour postuler</h3>${data.submission.mode === 'email' ? `<p>Ouvre le brouillon dans ta messagerie, vérifie le destinataire et le CV joint, puis envoie-le toi-même.</p><p class="recipient">${esc(data.submission.recipient || '')}</p><a class="button-link" href="${base}/email">Télécharger le brouillon .eml ↓</a>` : `<p>Copie les réponses, télécharge ton CV et termine sur le site de l’entreprise.</p>${job.url?`<a class="button-link" href="${esc(job.url)}" target="_blank" rel="noopener noreferrer">Ouvrir le formulaire officiel ↗</a>`:'<p>Ajoute une URL employeur si tu souhaites ouvrir le formulaire depuis cette fiche.</p>'}`}<p class="footnote">Après l’envoi, utilise « J’ai postulé » pour mettre ton suivi à jour.</p></div></div></div>`;
 }
 function tracking(job) {
   const sent = job.status === 'SUBMITTED', canRecord = ['REVIEWED','APPROVED','MANUAL_ACTION_REQUIRED','SUBMISSION_UNCERTAIN'].includes(job.status);
@@ -172,10 +173,10 @@ function tracking(job) {
 }
 function render() {
   const job = current, data = job.dossier, stage = stageFor(job), canReview = data && !job.problems.length && ['APPLICATION_READY','NEEDS_INPUT','SKIPPED','VERIFIED'].includes(job.status), canRecord = ['REVIEWED','APPROVED','MANUAL_ACTION_REQUIRED','SUBMISSION_UNCERTAIN'].includes(job.status);
-  $('#review').innerHTML = `<a class="back" href="/" id="back">← Toutes les opportunités</a><div class="review-top"><div class="company-heading">${mark(job.company)}<div><h1 id="job-title" tabindex="-1">${esc(job.company)}</h1><p class="review-role">${esc(job.audit.title || job.role)}</p>${status(displayStatus(job))}</div></div><div class="review-actions"><a class="button-link" href="${esc(job.url)}" target="_blank" rel="noopener noreferrer">Voir l’annonce ↗</a>${canReview ? '<button class="primary" id="review-dossier">Valider le dossier</button>' : ''}${canRecord ? '<button class="primary" id="record-receipt">J’ai postulé</button>' : ''}<span class="action-hint">${job.status === 'SUBMITTED' ? 'Envoi enregistré dans ton suivi.' : canRecord ? 'À utiliser après ton envoi. Note facultative dans le suivi.' : canReview ? 'Validation locale. Aucun envoi automatique.' : 'Les informations manquantes sont indiquées dans le dossier.'}</span></div></div>
+  $('#review').innerHTML = `<a class="back" href="/" id="back">← Toutes les opportunités</a><div class="review-top"><div class="company-heading">${mark(job.company)}<div><h1 id="job-title" tabindex="-1">${esc(job.company)}</h1><p class="review-role">${esc(job.audit.title || job.role)}</p>${status(displayStatus(job))}</div></div><div class="review-actions"><button data-edit-opportunity="${esc(job.id)}" ${lockedStatuses.includes(job.status)?'disabled':''}>Modifier l’offre</button><button data-local-tools="${esc(job.id)}">Préparer sans connexion IA</button>${job.url?`<a class="button-link" href="${esc(job.url)}" target="_blank" rel="noopener noreferrer">Voir l’annonce ↗</a>`:''}${canReview ? '<button class="primary" id="review-dossier">Valider le dossier</button>' : ''}${canRecord ? '<button class="primary" id="record-receipt">J’ai postulé</button>' : ''}<span class="action-hint">${job.status === 'SUBMITTED' ? 'Envoi enregistré dans ton suivi.' : canRecord ? 'À utiliser après ton envoi. Note facultative dans le suivi.' : canReview ? 'Validation locale. Aucun envoi automatique.' : 'Les informations manquantes sont indiquées dans le dossier.'}</span></div></div>
     <div class="review-secondary"><div class="review-stage" aria-label="Étape ${stage} sur 3">${['Préparer','Envoyer','Suivre'].map((text, index) => `<span class="${stage === index + 1 ? 'current-step' : ''}"><span class="step-index" aria-hidden="true">${index + 1}</span>${text}</span>`).join('')}</div><div class="secondary-actions"><button class="text-button" id="later" ${lockedStatuses.includes(job.status) ? 'disabled' : ''}>Reporter</button><button class="text-button" id="skip" ${lockedStatuses.includes(job.status) ? 'disabled' : ''}>Ignorer</button></div></div>
     <div class="review-tabs" role="tablist" aria-label="Contenu de la candidature"><button role="tab" id="tab-offre" aria-controls="panel-offre" data-tab="offre">L’offre</button><button role="tab" id="tab-dossier" aria-controls="panel-dossier" data-tab="dossier">Le dossier${data ? '' : ' <small>à préparer</small>'}</button><button role="tab" id="tab-suivi" aria-controls="panel-suivi" data-tab="suivi">Le suivi</button></div>
-    <section id="panel-offre" role="tabpanel" aria-labelledby="tab-offre">${offer(job)}</section><section id="panel-dossier" role="tabpanel" aria-labelledby="tab-dossier">${data ? dossier(job, data) : '<div class="empty-state"><strong>Le dossier reste à préparer.</strong><p>Les informations de l’offre et l’éligibilité doivent être vérifiées avant de générer un CV et des réponses.</p><button id="see-offer">Comprendre cette offre</button></div>'}</section><section id="panel-suivi" role="tabpanel" aria-labelledby="tab-suivi">${tracking(job)}</section>`;
+    <section id="panel-offre" role="tabpanel" aria-labelledby="tab-offre">${job.audit.pending_retrieval?'<p class="notice">URL conservée pour plus tard. Utilise « Modifier l’offre » pour récupérer la fiche en ligne ou coller sa description.</p>':''}${job.audit.source==='Import IA · non vérifié'?'<p class="notice">Offre proposée par une IA externe. Son existence, sa fraîcheur et ses conditions ne sont pas vérifiées.</p>':''}${offer(job)}${job.audit.external_analysis?`<section class="notice"><h2>Analyse IA importée · non vérifiée</h2><pre class="portable-result">${esc(JSON.stringify(job.audit.external_analysis,null,2))}</pre></section>`:''}</section><section id="panel-dossier" role="tabpanel" aria-labelledby="tab-dossier">${data ? dossier(job, data) : '<div class="empty-state"><strong>Le dossier reste à préparer.</strong><p>Les informations de l’offre et l’éligibilité doivent être vérifiées avant de générer un CV et des réponses.</p><button id="see-offer">Comprendre cette offre</button></div>'}</section><section id="panel-suivi" role="tabpanel" aria-labelledby="tab-suivi">${tracking(job)}</section>`;
   $('#back').onclick = event => { if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return; event.preventDefault(); home(); };
   $('#later').onclick = () => decide('LATER'); $('#skip').onclick = () => decide('SKIP');
   if ($('#review-dossier')) $('#review-dossier').onclick = () => decide('REVIEW');
@@ -255,7 +256,7 @@ async function recordSent() {
 }
 async function init() {
   const route = new URLSearchParams(location.search);
-  if (['all','dossiers','ready','sent'].includes(route.get('view'))) selectedView = route.get('view');
+  if (['all','saved','dossiers','ready','sent'].includes(route.get('view'))) selectedView = route.get('view');
   if (route.get('layout') === 'grid') layout = 'grid';
   $('#search').value = route.get('q') || '';
   if ([...$('#filter').options].some(option => option.value === route.get('filter'))) $('#filter').value = route.get('filter');

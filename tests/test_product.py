@@ -135,14 +135,14 @@ class ProductTest(unittest.TestCase):
             self.assertIsNone(self.ws.setting('onboarding_draft'))
             self.assertEqual(client.post('/api/discovery/cancel',json={}).status_code,403)
 
-    def test_api_gates_data_and_profile_then_retains_manual_submission(self):
+    def test_local_workspace_needs_no_provider_and_retains_manual_submission(self):
         provider=Mock();provider.status.return_value={'connected':False,'provider':'chatgpt'}
         with patch.object(module,'store',self.store),patch.object(module,'workspace',self.ws),patch.object(module,'providers',provider):
             client=TestClient(module.app);headers={'x-local-token':module.TOKEN}
-            self.assertEqual(client.get('/api/jobs').status_code,401)
+            self.assertEqual(client.get('/api/jobs').status_code,200)
             self.assertEqual(client.get('/api/bootstrap',headers=headers).status_code,200)
             provider.status.return_value={'connected':True,'provider':'chatgpt'}
-            self.assertEqual(client.get('/api/jobs').status_code,409)
+            self.assertEqual(client.get('/api/jobs').status_code,200)
             self.assertEqual(client.put('/api/profile',json=PROFILE,headers=headers).status_code,200)
             self.assertEqual(client.get('/api/jobs').status_code,200)
             self.assertEqual(client.post('/api/jobs/no/decision',json={'choice':'GO'},headers=headers).status_code,409)

@@ -9,6 +9,7 @@ import unicodedata
 
 from .net import json_request
 from . import ats
+from .opportunities import canonical_url
 from .store import digest, now
 
 SOURCES = [('Arbeitnow · Europe', 'https://www.arbeitnow.com/api/job-board-api'),
@@ -89,6 +90,10 @@ def refresh(workspace, query='', progress=None, cancelled=None):
         return {'cached': True, **last}
     errors, imported = [], 0
     known = {job['id']: job for job in workspace.store.all()}
+    known_urls = set()
+    for job in known.values():
+        try: known_urls.add(canonical_url(job['url']))
+        except ValueError: pass
     profile = workspace.profile() or {}
     search = urlencode({'q': query or (profile.get('roles') or [''])[0], 'country': {'france':'FR','fr':'FR','germany':'DE','deutschland':'DE','united kingdom':'GB','uk':'GB','spain':'ES','espagne':'ES','belgium':'BE','belgique':'BE','united states':'US','canada':'CA'}.get((profile.get('locations') or [''])[0].casefold(), ''), 'sort': 'relevant'})
     feeds = SOURCES + [('Himalayas', 'https://himalayas.app/jobs/api/search?' + search)] + [(board, ats.endpoint(board)) for board in configured]
@@ -128,6 +133,9 @@ def refresh(workspace, query='', progress=None, cancelled=None):
                 url, company, title = raw.get('url'), raw.get('company_name'), raw.get('title')
                 if not all(isinstance(value, str) and value.strip() for value in (url, company, title)) or not url.startswith('https://'):
                     continue
+                try: url = canonical_url(url)
+                except ValueError: continue
+                if url in known_urls: continue
                 identity = 'offer-' + digest(url)[:20]
                 if identity in known:
                     continue
@@ -146,7 +154,7 @@ def refresh(workspace, query='', progress=None, cancelled=None):
                     'active': None, 'france_allowed': None, 'requirements_checked': False,
                     'published_at': datetime.fromtimestamp(created, timezone.utc).isoformat() if isinstance(created, (int, float)) else None,
                     'scores': {}, 'warnings': ['Annonce issue d’un tableau employeur. Ouverture et éligibilité à vérifier.' if raw.get('employer_board') else 'Annonce issue d’un agrégateur. Ouverture et éligibilité à vérifier sur le site employeur.']})
-                known[identity] = True; imported += 1
+                known[identity] = True; known_urls.add(url); imported += 1
         except (ValueError, OSError, OverflowError) as error:
             errors.append({'source': source, 'message': str(error)[:300]})
     result = {'time': time.time(), 'checked_at': now(), 'imported': imported, 'errors': errors,

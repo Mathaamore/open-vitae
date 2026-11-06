@@ -23,7 +23,7 @@ with tempfile.TemporaryDirectory() as tmp:
             assert page.locator('.welcome-bar .brand-wordmark').evaluate('(image)=>image.complete && image.naturalWidth>0')
             assert page.request.get(url+'/static/favicon.svg').ok
             assert page.request.get(url+'/static/app-icon.png').ok
-            assert page.request.get(url+'/api/jobs').status==401
+            assert page.request.get(url+'/api/jobs').status==200
             page.screenshot(path=str(out/'product-connection.png'))
             page.set_viewport_size({'width':375,'height':812});assert page.evaluate('document.documentElement.scrollWidth<=innerWidth')
             page.screenshot(path=str(out/'product-connection-mobile.png'))
@@ -80,7 +80,7 @@ with tempfile.TemporaryDirectory() as tmp:
             page.screenshot(path=str(out/'product-search-mobile.png'))
             assert not errors,errors
             browser.close()
-        print('Product journey passed: mandatory connection, onboarding, local CV import, chat, offer feedback, preparation, factual PDF, explicit checks/consent, manual sent record, responsive UI. Fake providers/sources and temporary data only.')
+        print('Integrated journey passed: optional provider connection, onboarding, local CV import, chat, offer feedback, preparation, factual PDF, explicit checks/consent, manual sent record, responsive UI. Fake providers/sources and temporary data only.')
     finally:
         proc.terminate()
         try:proc.wait(timeout=5)

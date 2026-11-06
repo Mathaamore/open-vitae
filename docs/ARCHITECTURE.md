@@ -4,12 +4,13 @@ A native Mac window wraps a loopback-only FastAPI service. SQLite and documents 
 
 | Location | Responsibility |
 |---|---|
-| `src/job_agent/app.py` | Local session/origin checks, provider/onboarding gates and HTTP endpoints |
+| `src/job_agent/app.py` | Local session/origin checks, optional provider operations and HTTP endpoints |
 | `store.py`, `workspace.py` | Versioned dossiers, candidate profile, explicit feedback, queue state and usage budget |
 | `providers.py`, `assistant.py` | Keyring-backed API transports and isolated Codex app-server integration |
 | `sources.py`, `ats.py`, `net.py` | Public feeds, local ranking and bounded HTTPS requests with public-address checks |
 | `packets.py`, `browser.py` | Read-only form inventory, factual preparation and PDF generation |
 | `delivery.py` | Downloadable draft email assembly; no sending transport |
+| `opportunities.py`, `portable.py` | Canonical manual jobs, explicit public metadata retrieval, local drafts, portable artifact validation/prompting and private backups |
 | `web/` | Onboarding, conversation, suggestions, dossiers and tracking UI |
 | `migrations.py` | Integrity checks, private backups before schema changes and newer-schema protection |
 | `site/` | Independent static French website, Vercel configuration and curated verified-release link |

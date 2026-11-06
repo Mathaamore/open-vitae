@@ -19,7 +19,7 @@ from .store import Store, artifact, LOCKED, now
 from .assistant import CodexAssistant
 from .workspace import Workspace, extract_resume, preference_patch
 from .providers import Providers, CATALOG
-from . import sources, packets
+from . import sources, packets, opportunities, portable
 from starlette.concurrency import run_in_threadpool
 
 app = FastAPI(title='Open Vitæ', docs_url=None, redoc_url=None)
@@ -40,22 +40,14 @@ COMPANY_CONTEXT = json.loads(context_file.read_text()) if context_file.is_file()
 
 @app.middleware('http')
 async def local_only(request: Request, call_next):
+    origin=request.headers.get('origin')
+    if origin and (request.method not in {'GET','HEAD'} or request.url.path.startswith('/api/')) and (urlparse(origin).hostname not in {'127.0.0.1','localhost'} or urlparse(origin).netloc != request.headers.get('host')):
+        return JSONResponse({'error':'Local origin required'}, status_code=403)
     if request.method not in {'GET','HEAD'} or request.url.path.startswith(('/api/assistant', '/api/providers', '/api/bootstrap')):
-        origin = request.headers.get('origin')
-        if origin and (urlparse(origin).hostname not in {'127.0.0.1','localhost'} or urlparse(origin).netloc != request.headers.get('host')):
-            return JSONResponse({'error':'Local origin required'}, status_code=403)
         if request.headers.get('x-local-token') != TOKEN:
             return JSONResponse({'error':'Reload the local dashboard'}, status_code=403)
-    public = request.url.path in {'/api/session', '/api/bootstrap', '/api/providers', '/api/providers/connect', '/api/providers/disconnect', '/api/assistant', '/api/assistant/login', '/api/assistant/logout'}
-    if request.url.path.startswith('/api/') and not public:
-        try:
-            connected = (await run_in_threadpool(providers.status)).get('connected')
-        except ValueError:
-            connected = False
-        if connected and not workspace.profile() and not request.url.path.startswith(('/api/profile', '/api/usage')):
-            return JSONResponse({'error': 'Présente-toi pour préparer ta recherche.', 'gate': 'profile'}, status_code=409)
-        if not connected:
-            return JSONResponse({'error': 'Connecte ton fournisseur IA pour ouvrir ton espace.', 'gate': 'connection'}, status_code=401)
+    if request.url.path.startswith('/api/') and request.headers.get('sec-fetch-site') == 'cross-site':
+        return JSONResponse({'error':'Local origin required'}, status_code=403)
     response = await call_next(request)
     response.headers['Cache-Control'] = 'no-store'
     response.headers['X-Content-Type-Options'] = 'nosniff'
@@ -153,7 +145,11 @@ def document(job_id: str, filename: str):
     allowed = {'resume.pdf','resume.html','resume.json','tailoring.json','motivation.txt'}
     if filename not in allowed or job_id not in {j['id'] for j in store.all()}:
         raise ValueError('Unknown dossier artifact')
-    return FileResponse(artifact(store.root,f'data/dossiers/{job_id}/{filename}'))
+    current = store.get(job_id)
+    files = (current.get('dossier') or {}).get('attachments',[])
+    pdf = next((entry['path'] for entry in files if entry.get('path','').endswith('/resume.pdf')),None)
+    relative = str(Path(pdf).parent/filename) if pdf and '/local-' in pdf else f'data/dossiers/{job_id}/{filename}'
+    return FileResponse(artifact(store.root,relative))
 
 @app.get('/api/assistant')
 def assistant_status():
@@ -162,12 +158,17 @@ def assistant_status():
 
 @app.post('/api/assistant/login')
 def assistant_login():
-    return providers.connect('chatgpt')
+    result=providers.connect('chatgpt')
+    workspace.set_setting('provider','chatgpt')
+    workspace.set_setting('local_mode',False)
+    return result
 
 
 @app.post('/api/assistant/logout')
 def assistant_logout():
-    return providers.disconnect()
+    result=providers.disconnect()
+    workspace.set_setting('local_mode',True)
+    return result
 
 
 @app.post('/api/jobs/{job_id}/suggestion')
@@ -200,14 +201,12 @@ async def suggestion(job_id: str, request: Request):
 
 @app.get('/api/bootstrap')
 def bootstrap():
-    try:
-        connection = providers.status()
-    except ValueError as error:
-        connection = {'connected': False, 'error': str(error), 'provider': workspace.setting('provider', 'chatgpt')}
+    cached = getattr(providers,'cached',None)
+    connection = cached[2] if isinstance(cached,tuple) and len(cached)==3 and not workspace.setting('local_mode',False) else {'connected':False,'provider':workspace.setting('provider'),'name':'Mode local · IA facultative'}
     return {'connection': connection, 'onboarded': bool(workspace.profile()),
-            'profile': workspace.profile_draft() if connection.get('connected') else None,
-            'onboarding': workspace.setting('onboarding_draft') if connection.get('connected') else None,
-            'providers': CATALOG, 'version': version('open-vitae')}
+            'profile': workspace.profile_draft(),
+            'onboarding': workspace.setting('onboarding_draft'),
+            'profile_analysis':workspace.setting('portable_profile_analysis'), 'providers': CATALOG, 'version': version('open-vitae')}
 
 
 @app.get('/api/providers')
@@ -218,13 +217,91 @@ def provider_status():
 @app.post('/api/providers/connect')
 async def connect_provider(request: Request):
     data = await payload(request)
-    return await run_in_threadpool(providers.connect, data.get('provider'), data.get('key'))
+    result = await run_in_threadpool(providers.connect, data.get('provider'), data.get('key'))
+    workspace.set_setting('provider',data.get('provider'))
+    workspace.set_setting('local_mode',False)
+    return result
 
 
 @app.post('/api/providers/disconnect')
 def disconnect_provider():
-    return providers.disconnect()
+    result=providers.disconnect()
+    workspace.set_setting('local_mode',True)
+    return result
 
+
+@app.post('/api/providers/local')
+def local_mode():
+    workspace.set_setting('local_mode',True)
+    return {'local':True}
+
+
+@app.post('/api/opportunities')
+async def add_opportunity(request: Request):
+    return opportunities.add(workspace,await payload(request))
+
+
+@app.put('/api/opportunities/{job_id}')
+async def edit_opportunity(job_id: str, request: Request):
+    return opportunities.edit(workspace,job_id,await payload(request))
+
+
+@app.post('/api/opportunities/retrieve')
+async def retrieve_opportunity(request: Request):
+    data=await payload(request)
+    return await run_in_threadpool(opportunities.retrieve,data.get('url',''))
+
+
+@app.get('/api/portable/schema')
+def portable_schema():
+    return portable.schema()
+
+
+@app.post('/api/portable/prompt')
+async def portable_prompt(request: Request):
+    data=await payload(request)
+    return portable.prompt(workspace,data.get('type'),data.get('job_id'))
+
+
+async def portable_payload(request):
+    buffer=bytearray()
+    async for chunk in request.stream():
+        buffer.extend(chunk)
+        if len(buffer)>1_000_000:raise ValueError('Le fichier JSON doit faire au maximum 1 Mo.')
+    return portable.parse(bytes(buffer))
+
+
+@app.post('/api/portable/preview')
+async def preview_portable(request: Request):
+    return portable.preview(workspace,await portable_payload(request))
+
+
+@app.post('/api/portable/import')
+async def import_portable(request: Request):
+    return await run_in_threadpool(portable.apply,workspace,await portable_payload(request))
+
+
+@app.post('/api/opportunities/{job_id}/draft')
+async def local_draft(job_id: str, request: Request):
+    value=await payload(request)
+    ctx=portable.context(workspace,'application_draft',job_id)
+    if value.get('revision') != ctx['job_revision'] or value.get('updated_at') != ctx['job_updated_at']:raise ValueError('Le dossier a changé. Recharge-le.')
+    data={'summary':value.get('summary',''),'motivation':value.get('motivation',''),'selected_facts':[]}
+    portable.validate(workspace,{'schema_version':1,'type':'application_draft','context':ctx,'data':data})
+    await run_in_threadpool(portable.draft,workspace,job_id,data,ctx['job_revision'],ctx['job_updated_at'])
+    return job(job_id)
+
+
+@app.get('/api/export')
+def export_workspace():
+    return {'schema_version':1,'profile':workspace.profile(),'jobs':store.all(),'feedback':workspace.feedback(),
+            'profile_analysis':workspace.setting('portable_profile_analysis')}
+
+
+@app.post('/api/backup')
+async def backup_workspace():
+    content=await run_in_threadpool(portable.backup,workspace)
+    return Response(content,media_type='application/zip',headers={'Content-Disposition':'attachment; filename="open-vitae-backup.zip"'})
 
 @app.get('/api/profile')
 def profile():
@@ -319,6 +396,13 @@ def run_preparation(job_id):
         packets.prepare(workspace, providers, job_id)
     except Exception as error:
         text = str(error) if isinstance(error, ValueError) else 'La préparation a échoué. Le dossier existant est conservé.'
+        if not store.get(job_id)['revision']:
+            try:
+                portable.draft(workspace,job_id)
+                workspace.preparation(job_id,'ready','IA indisponible. Un brouillon local modifiable a été conservé : '+text[:300])
+                return
+            except Exception:
+                pass
         workspace.preparation(job_id, 'failed', text[:1000])
 
 
@@ -335,7 +419,9 @@ async def interest(job_id: str, request: Request, background: BackgroundTasks):
         raise ValueError('Cette offre n’est plus disponible ou comporte un point bloquant documenté.')
     workspace.decide(job_id, data.get('decision'), data.get('reason', ''))
     if data.get('decision') == 'accept' and not current['revision']:
-        if workspace.queue(job_id):
+        if workspace.setting('local_mode',False) or not workspace.setting('provider'):
+            await run_in_threadpool(portable.draft,workspace,job_id)
+        elif workspace.queue(job_id):
             background.add_task(preparation_worker.submit, run_preparation, job_id)
     return {'decision': data['decision'], 'preparation': workspace.preparation(job_id)}
 

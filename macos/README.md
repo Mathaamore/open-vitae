@@ -6,7 +6,7 @@ Application AppKit + WKWebView pour macOS 14+, Apple Silicon. Python, le service
 
 Décompresser Open-vitae-Mac.zip, déplacer Open Vitae.app dans Applications, puis l’ouvrir. La compilation locale est signée ad hoc, sans notarisation Apple. Une diffusion publique nécessite signature Developer ID et notarisation ; ne pas désactiver Gatekeeper.
 
-Un espace neuf est créé dans ~/Library/Application Support/Candidatures. Un ancien espace sélectionné est conservé ; le menu Fichier permet d’en changer. Les données restent hors du paquet. Se connecter à un fournisseur est obligatoire, puis le profil et l’import du CV permettent de commencer la recherche. Les dossiers existants restent conservés.
+Un espace neuf est créé dans ~/Library/Application Support/Candidatures. Un ancien espace sélectionné est conservé ; le menu Fichier permet d’en changer. Les données restent hors du paquet. Le mode local permet de créer le profil, d’importer un CV, de conserver des offres et de préparer des documents sans connexion IA. Un fournisseur intégré est facultatif. Les dossiers existants restent conservés.
 
 ChatGPT utilise Codex app-server et son parcours de connexion officiel, avec une session isolée et des identifiants gérés dans le trousseau macOS. Claude et Gemini utilisent leurs API : ce ne sont pas des connexions à leurs abonnements grand public. Les clés restent dans le trousseau. Les conditions et limites du fournisseur s’appliquent ; les frais ne sont pas inclus dans l’application gratuite.
 

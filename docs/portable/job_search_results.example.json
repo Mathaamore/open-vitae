@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "type": "job_search_results",
+  "context": {
+    "profile_revision": 1
+  },
+  "data": {
+    "jobs": [
+      {
+        "company": "Example",
+        "role": "Python engineer",
+        "url": "https://example.com/jobs/python",
+        "description": "Description sourcée à vérifier",
+        "location": "Lieu à confirmer",
+        "salary": ""
+      }
+    ]
+  }
+}

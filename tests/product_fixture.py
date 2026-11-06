@@ -6,7 +6,10 @@ from job_agent.store import now
 
 class FakeProvider:
     def __init__(self):self.connected=False;self.name='Gemini'
-    def status(self,fresh=False):return {'available':True,'connected':self.connected,'name':self.name,'provider':'gemini'}
+    def status(self,fresh=False):
+        result={'available':True,'connected':self.connected,'name':self.name,'provider':'gemini'}
+        self.cached=('gemini',0,result)
+        return result
     def connect(self,provider,key=None):self.connected=True;self.name={'chatgpt':'ChatGPT','claude':'Claude','gemini':'Gemini'}[provider];return {'connected':True}
     def disconnect(self):self.connected=False;return {'connected':False}
     def complete(self,task,payload,max_output=1600,**kwargs):
