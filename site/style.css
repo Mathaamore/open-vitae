@@ -7,3 +7,8 @@
 @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*,*:before,*:after{animation:none!important;transition:none!important}.tagline span{opacity:1}.button:hover{transform:none}}
 
 .tagline [data-i18n]{opacity:1}
+
+/* The editorial illustration complements the real application shown below. */
+.hero-content{display:grid;grid-template-columns:1.1fr 1fr;align-items:center;gap:24px}.hero-copy{position:relative;z-index:1}.hero-art{min-width:0;display:flex;align-items:center;justify-content:center}.hero-art img{display:block;width:100%;transform:rotate(-6deg)}.hero .introduction{max-width:520px}.product{padding:24px 24px 0;background:var(--surface);border:1px solid var(--line);border-radius:16px}.product figcaption{padding:16px 0}
+@media(max-width:1000px){.hero-content{grid-template-columns:1fr}.hero-art{max-width:560px;justify-self:center}.hero-art img{max-height:320px;object-fit:contain}.hero .introduction{max-width:640px}.product{margin-top:32px}}
+@media(max-width:420px){.hero-art img{max-height:240px}.product{padding:12px 12px 0}.product figcaption{padding:12px 0}}

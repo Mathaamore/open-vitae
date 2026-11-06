@@ -1,48 +1,66 @@
-<p align="center"><img src="src/job_agent/web/logo-horizontal.svg" alt="Open Vitæ" width="360"></p>
-
 # Open Vitæ
 
-A local, open-source workspace for finding roles, preparing honest applications and keeping track of what you sent.
+![Open Vitæ — Find work worth pursuing. Open source, made for Mac, AI optional.](site/assets/open-vitae-cover.png)
 
-**Early preview · MIT · macOS desktop app · English interface**
+**A local, open-source Mac workspace for a thoughtful job search.** Discover relevant roles, prepare applications from your real experience and follow each conversation through to its outcome.
 
-Introduce yourself, import your CV and explore job suggestions. Keep the offers that interest you; Open Vitæ prepares a company/product/team brief, a CV draft and answers to review and copy to the employer's website. You submit the application yourself and record the outcome.
+[Website](https://open-vitae.mathaamore.xyz/) · [Getting started](#run-from-source) · [Architecture](docs/ARCHITECTURE.md) · [Contributing](CONTRIBUTING.md) · [MIT license](LICENSE)
 
-![Example workspace with a fictional candidate and jobs](docs/images/workspace.png)
+**Early preview · macOS 14+ · Apple Silicon · English interface**
 
-The app works without internet, accounts or AI keys for profiles, CVs, saved jobs, drafts and tracking. Online discovery and integrated AI are optional. AI usage comes from your own provider account or API project and may cost money.
+## From first look to next step
 
-## What it does
+- **Discover.** Import an offer from a URL, a description or manual fields. Explore public feeds and configured employer boards, with local ranking and reasons for each match.
+- **Prepare.** Import your CV, keep your experience as the source of truth and build editable CVs and application answers. Export documents, save versions and review everything before sending.
+- **Track.** Record applications, replies, interviews, offers, rejections and withdrawals. Keep dated notes and activity history alongside each opportunity.
 
-- Add any job from a URL, pasted description or manual fields. Keep URL-only imports for later, edit opportunities and organize favorites in the same tracker.
-- Generate editable local CV/application drafts without AI; export private JSON or a workspace backup.
-- Use any compatible external AI: generate a contextual prompt, copy it yourself, then preview and confirm a versioned JSON result. [Portable AI format and offline workflow](docs/PORTABLE_AI.md).
+Your profile, CV imports, saved jobs, drafts and tracker work offline without an account or AI key. Online discovery and AI assistance are optional. You submit applications yourself on the employer’s site.
 
-- Resumable local onboarding with experience, strengths, motivations and search criteria. Import text PDFs, DOCX or TXT; scanned PDFs need OCR elsewhere.
-- Search public feeds from Himalayas and Arbeitnow, plus up to six configured employer boards (Greenhouse, Lever, Ashby), with source attribution and original links.
-- Follow source progress, cancel between reads and keep collected offers; [source contracts and limits](docs/SOURCES.md).
-- Rank locally and refine suggestions using explicit accept/pass feedback. Search and ranking use no model tokens.
-- Discuss criteria with your AI provider. Proposed profile changes require confirmation.
-- Queue preparation after accepting an offer. Keep documented CV facts intact and review generated summaries and answers.
-- Leave unknown eligibility, missing form questions and consent choices for the candidate to check.
-- Save versions, review dossiers and record a submission without requiring a receipt.
-- Track replies, interviews, offers, rejections and withdrawals with dated notes. Filter active and closed applications without changing your documents.
+<details>
+<summary>See the application workspace</summary>
 
-## AI providers
+![The application with a fictional candidate and jobs](docs/images/workspace.png)
 
-| Provider | Access | Cost and limits |
+Screenshots and tests use fictional profiles and opportunities.
+
+</details>
+
+## The stack
+
+Open Vitæ is a native Mac shell around a local web application. The interface talks to a Python service bound to loopback; your workspace stays on your computer.
+
+| Layer | Technology | Responsibility |
 |---|---|---|
-| ChatGPT | Official local Codex app-server browser sign-in | Your account's access and usage limits apply |
-| Claude | Anthropic API key stored in the OS keyring | API billing; does not connect a Claude subscription |
-| Gemini | Google AI Studio API key stored in the OS keyring | Project quota/free tier/billing; does not connect a Gemini subscription |
+| Mac application | Swift, AppKit, WKWebView | Native window and lifecycle; starts the bundled local service |
+| Local service | Python 3.11+, FastAPI, Uvicorn | Workspace operations, job discovery, preparation and provider integration |
+| Interface | HTML, CSS, vanilla JavaScript, Geist | Onboarding, job review, document editing and application tracking |
+| Storage | SQLite and local files | Profiles, jobs, activity history, document versions and backups |
+| Documents | ReportLab, pypdf, standard-library DOCX/TXT parsing | PDF export and text imports; scanned PDFs require OCR elsewhere |
+| Browser automation | Playwright and Chromium | Read public employer pages and inspect forms; never submit applications |
+| Optional AI | Official Codex app-server, Anthropic API, Google Gemini API | Assistance using the candidate’s chosen provider |
+| Packaging | PyInstaller, native Swift shell; Sparkle for release updates | Bundle the Python runtime and desktop dependencies |
+| Marketing website | Static HTML, CSS and JavaScript on Vercel | Public information and verified release availability |
+| Checks | Python unittest, Node test runner, Playwright | Service tests, interface logic and browser journeys |
 
-ChatGPT development uses the official local integration. Registration and distribution requirements must be checked before shipping public binaries. See [provider behavior](docs/PROVIDERS.md).
+There is no React build pipeline or Node runtime requirement for the application or website. Node is used for JavaScript tests. See the [architecture and code map](docs/ARCHITECTURE.md) for module boundaries and data flow.
 
-Default app limit: 20 model requests per UTC day, adjustable from 1 to 100. Failed requests count conservatively. Repeated identical requests can reuse the cache. Context is bounded, requests are serialized and there are no automatic retries or expensive model upgrades. API requests have output-token limits; Codex does not expose a strict per-turn output cap. Only provider-reported token usage is displayed, not an invented credit balance.
+## AI on your terms
+
+Local discovery and ranking use no model tokens. Prepare drafts yourself, use an integrated provider or take a portable prompt to another AI and review its result before importing it.
+
+| Provider | Connection | Account and billing |
+|---|---|---|
+| ChatGPT | Official local Codex app-server browser sign-in | Your account’s access and usage limits apply |
+| Claude | Anthropic API key in the OS keyring | Separate API billing; does not connect a Claude subscription |
+| Gemini | Google AI Studio API key in the OS keyring | Project quota or billing; does not connect a Gemini subscription |
+
+Requests use bounded context and are serialized. The default limit is 20 model requests per UTC day, adjustable from 1 to 100; failures count conservatively. There are no automatic retries or model upgrades. API responses have output-token limits; Codex does not expose a strict per-turn output cap. Only provider-reported usage is displayed.
+
+Read about [providers and limits](docs/PROVIDERS.md) or the [portable AI and offline workflow](docs/PORTABLE_AI.md). Public distribution requirements for the ChatGPT integration still need verification before shipping binaries.
 
 ## Run from source
 
-Python 3.11+ is required. The service is for local development; the Mac shell bundles the runtime for end users.
+Requires **Python 3.11+**. These commands create a separate temporary development workspace; it may be removed by the operating system. Choose a persistent directory for your own work.
 
 ```sh
 git clone https://github.com/Mathaamore/open-vitae.git
@@ -50,36 +68,34 @@ cd open-vitae
 python3 -m venv .venv
 .venv/bin/python -m pip install -e '.[test]'
 .venv/bin/python -m playwright install chromium --only-shell
-.venv/bin/python -m job_agent.main
-```
-
-Open **http://127.0.0.1:8765**. Choose **Get started**, complete your profile and add an offer. Connect a provider later if you want integrated assistance. ChatGPT requires the official Codex CLI on PATH when running from source; Claude and Gemini require a working OS keyring. Tests use fake providers and do not require keys.
-
-The default Mac workspace is `~/Library/Application Support/Candidatures`; the historical directory name is retained for compatibility. On Linux the service uses `$XDG_DATA_HOME/candidatures` or `~/.local/share/candidatures`. To use a separate development space:
-
-```sh
 .venv/bin/python -m job_agent.main --workspace /tmp/open-vitae-dev
 ```
 
-## Mac app
+Open **http://127.0.0.1:8765**, choose **Get started** and add a profile and an offer. Connect an AI provider later if you want assistance. Source-based ChatGPT integration requires the official Codex CLI on `PATH`; API providers require a working OS keyring. Tests use fake providers and need no keys.
 
-The native AppKit/WKWebView shell targets macOS 14+ on Apple Silicon. It bundles the Python service, Codex and a browser engine; end users do not need a terminal. See [build instructions](macos/README.md) and the [release and recovery runbook](docs/RELEASING.md).
+Without `--workspace`, the default Mac directory is `~/Library/Application Support/Candidatures` (the historical name is retained for compatibility). Linux uses `$XDG_DATA_HOME/candidatures` or `~/.local/share/candidatures`.
 
-No notarized public installer is published yet. Local builds are ad-hoc signed. Developer ID, Sparkle, notarization and DMG tooling are available in the release-candidate workflow; the signed workflow, real-account access and clean-Mac journey still require verification before publication. Do not bypass macOS security protections to distribute a build.
+### Mac app availability
 
-## Public website
+The desktop shell targets **macOS 14+ on Apple Silicon** and bundles the Python service, Codex and Chromium. End users of the bundled app do not need a terminal.
 
-The English static landing page lives in [`site/`](site/README.md). Deploy to Vercel with **Root Directory `site`**, framework **Other**, no build command and output **`.`**. It never connects to the local service. The download CTA remains unavailable until a maintainer records a verified release.
+**No verified, notarized public installer is available yet.** Local builds are ad-hoc signed. Developer ID signing, notarization, DMG packaging and Sparkle update tooling exist, but public release and clean-Mac verification remain outstanding. See [Mac build instructions](macos/README.md) and the [release runbook](docs/RELEASING.md).
 
-## Privacy
+### Website
 
-Profiles, SQLite records and generated documents stay in the selected workspace. Requested context is sent to the chosen AI provider; public job feeds receive role/query terms and optional country filtering, not the CV. Employer metadata retrieval is an explicit optional action. Integrated preparation can read public employer pages anonymously to inspect forms. Portable prompts may contain CV details: review them before sharing with an external AI. No telemetry is included.
+The landing lives in [`site/`](site/README.md) and never connects to the local application. Vercel settings: **Root Directory `site`**, framework **Other**, no build command, output **`.`**. The download stays unavailable until a maintainer records a verified release. [Visual sources and generation prompt](design/brand/open-vitae/visuals/README.md).
 
-Provider credentials stay in the OS keyring or isolated Codex session. The app does not copy credentials from another app. Disconnecting a provider does not delete dossiers. The local service must not be exposed publicly; see [SECURITY.md](SECURITY.md).
+## Your workspace, your decisions
+
+Profiles, SQLite records and generated documents stay in your chosen workspace. Provider credentials use the OS keyring or an isolated Codex session. Disconnecting a provider keeps your dossiers. There is no built-in telemetry.
+
+AI requests send relevant context to the provider you select. Public feeds receive search terms and optional country filtering, not your CV. Employer metadata retrieval is optional; integrated preparation may anonymously read public employer pages. Portable prompts can contain CV details: review them before sharing.
+
+Job coverage is partial and openings can be stale. Matches do not establish eligibility. You verify facts, review answers, choose consent and demographic responses, and send the application yourself. Dynamic forms may need manual completion. The local service must stay private; see [SECURITY.md](SECURITY.md).
 
 ## Contribute
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for setup and review expectations, [architecture](docs/ARCHITECTURE.md) for the code map and [roadmap](docs/ROADMAP.md) for current priorities. Small fixes, accessibility improvements and reproducible bug reports are welcome. Use fictional candidate data in every issue, screenshot and test.
+Start with [CONTRIBUTING.md](CONTRIBUTING.md), the [architecture](docs/ARCHITECTURE.md) and the [roadmap](docs/ROADMAP.md). Bug reports, accessibility improvements and focused fixes are welcome. Use fictional data in tests, screenshots and issues.
 
 ```sh
 .venv/bin/python -m unittest discover -s tests -q
@@ -91,10 +107,8 @@ node --test tests/test_web.js
 .venv/bin/python scripts/check_repository.py
 ```
 
-## Limits
-
-The job feeds cover only part of the market and can be stale or unavailable. A match is not proof of eligibility or a job offer. Dynamic forms may need manual completion; the app does not send applications, solve CAPTCHAs or choose consent/demographic answers. The end-to-end tests use fictional providers and jobs; successful tests do not establish access to every real provider account or employer site.
+Browser tests exercise fictional providers and jobs; they do not prove access to every real account or employer website. Job source coverage and limits are documented in [SOURCES.md](docs/SOURCES.md).
 
 ## License
 
-Original code and brand assets are [MIT licensed](LICENSE). Fonts, bundled tools and job content retain their own licenses and terms; see [third-party notices](THIRD_PARTY_NOTICES.md). Open Vitæ is an independent project.
+Original code and project brand assets are [MIT licensed](LICENSE). Fonts, bundled tools and job content retain their own licenses and terms; see [third-party notices](THIRD_PARTY_NOTICES.md). Open Vitæ is an independent project.

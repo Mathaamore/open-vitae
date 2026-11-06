@@ -28,6 +28,20 @@ def main():
             page.goto(url);expect(page.locator('h1')).to_contain_text('Find work')
             expect(page.locator('#release-status')).to_contain_text('No verified public installer')
             assert page.locator('.product>img').evaluate('(image)=>image.complete && image.naturalWidth>0')
+            assert page.locator('.hero-art img').evaluate('(image)=>image.complete && image.naturalWidth>0')
+            production = 'https://open-vitae.mathaamore.xyz/'
+            expect(page.locator('link[rel="canonical"]')).to_have_attribute('href', production)
+            expect(page.locator('meta[property="og:url"]')).to_have_attribute('content', production)
+            for selector in ('meta[property="og:image"]', 'meta[name="twitter:image"]'):
+                expect(page.locator(selector)).to_have_attribute('content', production + 'assets/open-vitae-cover.png')
+            expect(page.locator('meta[property="og:image:width"]')).to_have_attribute('content', '1200')
+            expect(page.locator('meta[property="og:image:height"]')).to_have_attribute('content', '630')
+            page.evaluate("""async () => {
+                const image = new Image(); image.src = 'assets/open-vitae-cover.png';
+                await image.decode();
+                if (image.naturalWidth !== 1200 || image.naturalHeight !== 630) throw Error('Invalid social cover dimensions');
+            }""")
+            page.screenshot(path=str(output/'landing-hero.png'))
             page.screenshot(path=str(output/'landing-desktop.png'),full_page=True)
             for width in (390,768,1024):
                 page.set_viewport_size({'width':width,'height':844})
