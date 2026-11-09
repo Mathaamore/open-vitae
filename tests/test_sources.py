@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from job_agent import ats, sources
+from job_agent import ats, sources, source_catalog, public_feeds
 from job_agent.store import Store
 from job_agent.workspace import Workspace
 
@@ -30,7 +30,7 @@ class SourcesTest(unittest.TestCase):
 
     def test_source_progress_cancel_partial_results_and_retry(self):
         with tempfile.TemporaryDirectory() as tmp:
-            ws = Workspace(Store(Path(tmp)));ws.save_profile(PROFILE)
+            ws = Workspace(Store(Path(tmp)));ws.save_profile(PROFILE);ws.set_setting('source_preferences', {key:'off' for key in ('remotive','remoteok','jobicy','wwr')})
             ws.set_setting('source_boards', ['lever:example'])
             progress=[]
             def feed(url):
@@ -53,7 +53,7 @@ class SourcesTest(unittest.TestCase):
         malformed=ats.postings('lever:example',[{'workplaceType':{},'text':'Python','hostedUrl':'https://example.com/job'}])
         self.assertIsNone(malformed[0]['remote'])
         with tempfile.TemporaryDirectory() as tmp:
-            ws=Workspace(Store(tmp));ws.save_profile(PROFILE)
+            ws=Workspace(Store(tmp));ws.save_profile(PROFILE);ws.set_setting('source_preferences', {key:'off' for key in ('remotive','remoteok','jobicy','wwr')})
             listing={'applicationLink':'https://example.com/job','companyName':'Example','title':'Python','pubDate':time.time()*1000,'expiryDate':float('nan')}
             with patch.object(sources,'json_request',side_effect=[{'data':[]},{'data':[]},{'jobs':[listing]}]):
                 self.assertEqual(sources.refresh(ws)['imported'],0)
@@ -80,3 +80,112 @@ class SourcesTest(unittest.TestCase):
             self.assertEqual([offer['id'] for offer in sources.recommendations(ws)], ['unknown'])
             ws.save_profile({**PROFILE,'roles':['Python APIs product'],'strict_constraints':False,'salary_min':50000})
             self.assertIn('office',[offer['id'] for offer in sources.recommendations(ws)])
+
+    def test_selection_uses_only_explicit_preferences_and_preserves_unknown_roles(self):
+        def chosen(profile, overrides=None):
+            return {s['id'] for s in source_catalog.selection(profile, overrides) if s['selected']}
+        self.assertIn('remotive', chosen(PROFILE))
+        self.assertNotIn('remotive', chosen({**PROFILE, 'remote':'office'}))
+        self.assertIn('remotive', chosen({**PROFILE, 'remote':'office'}, {'remotive':'on'}))
+        self.assertNotIn('remotive', chosen(PROFILE, {'remotive':'off'}))
+        self.assertIn('euraxess', chosen({**PROFILE,'roles':['Chercheur en biologie']}))
+        self.assertIn('reliefweb', chosen({**PROFILE,'roles':['Humanitarian coordinator']}))
+        self.assertIn('arbeitnow', chosen({**PROFILE,'roles':['Unknown profession'],'locations':['Paris']}))
+        self.assertEqual(source_catalog.countries({'locations':['Paris'],'bio':'France','cv_text':'Sweden'}), [])
+        self.assertEqual(source_catalog.countries({'locations':['Berlin, Germany','France'],'search_countries':['US']}), ['US','DE','FR'])
+        self.assertNotIn('arbeitnow-uk', chosen({**PROFILE,'search_countries':['FR']}))
+        self.assertNotIn('arbeitnow', chosen({**PROFILE,'search_countries':['US']}))
+
+    def test_bounded_rotation_visits_all_roles_countries_without_private_context(self):
+        profile={**PROFILE,'roles':['Python','Designer'],'search_countries':['FR','GB'],'email':'private@example.com','cv_text':'private experience'}
+        urls=[dict(source_catalog.feeds(profile, {}, rotation=i))['Himalayas'] for i in range(4)]
+        from urllib.parse import urlsplit, parse_qs
+        self.assertEqual({(parse_qs(urlsplit(url).query)['q'][0],parse_qs(urlsplit(url).query)['country'][0]) for url in urls}, {('Python','FR'),('Python','GB'),('Designer','FR'),('Designer','GB')})
+        self.assertTrue(all('private' not in url for url in urls))
+        self.assertLessEqual(len(source_catalog.feeds(profile, {})), 7)
+        self.assertEqual(len([url for name,url in source_catalog.feeds(profile, {}) if name=='We Work Remotely']),1)
+
+    def test_new_feed_contracts_and_attribution(self):
+        for name,raw in [
+            ('Remotive', {'url':'https://remotive.com/a','company_name':'Example','title':'Python','candidate_required_location':'Europe','publication_date':'unknown'}),
+            ('Remote OK', {'url':'https://remoteok.com/a','company':'Example','position':'Python','location':'US','date':'2026-11-09T12:00:00Z'}),
+            ('Jobicy', {'url':'https://jobicy.com/a','companyName':'Example','jobTitle':'Python','jobGeo':'Canada','pubDate':'unknown','salaryMax':80000,'salaryCurrency':'EUR','salaryPeriod':'yearly'})]:
+            data=[{'legal':'metadata'},raw] if name=='Remote OK' else {'jobs':[raw]}
+            rows,cut=public_feeds.postings(name,data)
+            self.assertEqual(len(rows),1)
+            self.assertEqual(rows[0]['url'],raw['url'])
+            self.assertEqual(rows[0]['company_name'],'Example')
+            self.assertIs(rows[0]['remote'],True)
+            self.assertFalse(cut)
+        rss=b'<rss><channel><item><title>Example: Python</title><link>https://weworkremotely.com/a</link><pubDate>Mon, 09 Nov 2026 12:00:00 GMT</pubDate></item><item><title>No employer</title></item></channel></rss>'
+        rows,_=public_feeds.postings('We Work Remotely',rss)
+        self.assertEqual(len(rows),1)
+        self.assertEqual(rows[0]['company_name'],'Example')
+        self.assertIsNotNone(rows[0]['created_at'])
+        for data in [b'<!DOCTYPE rss><rss/>',b'<invalid>',b'<html/>', '<!DOCTYPE rss><rss/>'.encode('utf-16')]:
+            with self.assertRaises(ValueError):public_feeds.postings('We Work Remotely',data)
+        for name in ('Remotive','Remote OK','Jobicy'):
+            with self.assertRaises(ValueError):public_feeds.postings(name,{'jobs':{}})
+        smart=ats.postings('smartrecruiters:example',{'content':[{'id':'123','name':'Python','location':{'city':'Paris','country':'FR'}}]})[0]
+        self.assertEqual(smart['url'],'https://jobs.smartrecruiters.com/example/123')
+        self.assertIsNone(smart['created_at'])
+        self.assertEqual(ats.postings('smartrecruiters:example',{'content':[{'id':'../invalid'}]}),[])
+
+    def test_source_cache_partial_retry_limits_and_disabled_calls(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ws=Workspace(Store(tmp));ws.save_profile(PROFILE)
+            ws.set_setting('source_preferences',{s['id']:'off' for s in source_catalog.CATALOG if s['id'] not in ('remotive','jobicy')})
+            def feed(url):
+                if 'remotive' in url:raise ValueError('offline')
+                return {'jobs':[{'url':'https://jobicy.com/fictional','companyName':'Example','jobTitle':'Python'}],'hasMore':True}
+            with patch.object(sources,'json_request',side_effect=feed) as read, patch.object(sources,'request') as rss:
+                first=sources.refresh(ws)
+                self.assertEqual(first['imported'],1)
+                self.assertIn('Jobicy',first['truncated'])
+                second=sources.refresh(ws)
+                self.assertEqual(read.call_count,2)
+                self.assertIn('Jobicy',second['cached_sources'])
+                self.assertIn('Remotive',second['limited_sources'])
+                rss.assert_not_called()
+                self.assertEqual(ws.store.all()[0]['audit']['source_url'],'https://jobicy.com/fictional')
+                with patch.object(sources.time,'time',return_value=time.time()+21601):
+                    sources.refresh(ws)
+                    self.assertEqual(read.call_count,3)
+            self.assertEqual(len(ws.store.all()),1)
+
+    def test_countries_validate_and_old_clients_keep_saved_countries(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ws=Workspace(Store(tmp));ws.save_profile({**PROFILE,'search_countries':['JP','FR','JP']})
+            self.assertEqual(ws.save_profile(PROFILE)['search_countries'],['JP','FR'])
+            for bad in ('FR',['France'],['ZZ'],[{}]):
+                with self.assertRaises(ValueError):ws.save_profile({**PROFILE,'search_countries':bad})
+            for bad in ({'unknown':'on'},{'remotive':[]},[]):
+                with self.assertRaises(ValueError):source_catalog.preferences(bad)
+
+    def test_failed_source_does_not_stall_rotation_and_jobicy_limit_is_source_wide(self):
+        from urllib.parse import urlsplit, parse_qs
+        with tempfile.TemporaryDirectory() as tmp:
+            ws=Workspace(Store(tmp));ws.save_profile({**PROFILE,'roles':['Python','Designer']})
+            ws.set_setting('source_preferences',{s['id']:'off' for s in source_catalog.CATALOG if s['id'] != 'himalayas'})
+            with patch.object(sources,'json_request',side_effect=ValueError('offline')) as read:
+                sources.refresh(ws);sources.refresh(ws)
+                self.assertEqual(read.call_args_list[0],read.call_args_list[1])
+                started=time.time()
+                with patch.object(sources.time,'time',return_value=started+86300):sources.refresh(ws)
+                with patch.object(sources.time,'time',return_value=started+86401):sources.refresh(ws)
+                self.assertEqual(parse_qs(urlsplit(read.call_args.args[0]).query)['q'],['Designer'])
+            ws.set_setting('source_preferences',{s['id']:'off' for s in source_catalog.CATALOG if s['id'] != 'jobicy'})
+            with patch.object(sources,'json_request',return_value={'jobs':[]}) as read:
+                sources.refresh(ws,'Python');result=sources.refresh(ws,'Designer')
+                self.assertEqual(read.call_count,1)
+                self.assertIn('Jobicy',result['limited_sources'])
+
+    def test_new_imports_deduplicate_and_reject_unsafe_listing_links(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ws=Workspace(Store(tmp));ws.save_profile(PROFILE)
+            ws.set_setting('source_preferences',{s['id']:'off' for s in source_catalog.CATALOG if s['id'] not in ('remotive','remoteok')})
+            remotive={'jobs':[{'url':'https://example.com/shared','company_name':'Example','title':'Python'}, {'url':'https://127.0.0.1/private','company_name':'Example','title':'Python'}, {'url':'javascript:alert(1)','company_name':'Example','title':'Python'}]}
+            remoteok=[{'url':'https://example.com/shared','company':'Example','position':'Python'}]
+            with patch.object(sources,'json_request',side_effect=[remotive,remoteok]):
+                self.assertEqual(sources.refresh(ws)['imported'],1)
+            self.assertEqual(len(ws.store.all()),1)

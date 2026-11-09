@@ -1,6 +1,7 @@
 (() => {
   const el = id => document.getElementById(id);
   let bootstrap, profile = {}, provider = 'chatgpt', step = 0, started = false, readyResolve, connectionTimer, connectionChecking = false, connectionGeneration = 0, searchBusy = false, chatBusy = false, preparationTimer, draftTimer;
+  let externalSources = [];
   window.profileDirty = false;
   const gateMessage = (text = '', error = false) => { el('gate-message').textContent = text; el('gate-message').hidden = !text; el('gate-message').classList.toggle('error', error); };
   function providerChoice(value) {
@@ -139,6 +140,7 @@
   async function saveProfile(event) {
     event.preventDefault(); clearTimeout(draftTimer); const form = el('profile-form'), data = Object.fromEntries(new FormData(form));
     data.roles = data.roles.split(',').map(value => value.trim()).filter(Boolean); data.locations = data.locations.split(',').map(value => value.trim()).filter(Boolean);
+    data.search_countries = data.search_countries.split(',').map(value => value.trim().toUpperCase()).filter(Boolean);
     data.strict_constraints = form.elements.namedItem('strict_constraints').checked;
     data.salary_min = data.salary_min ? Number(data.salary_min) : null;
     el('profile-save').disabled = true; gateMessage(t("workspace.saving_profile"));
@@ -183,9 +185,20 @@
     const url=offer.source_url?.startsWith('https://')?offer.source_url:offer.url;
     return `<article class="offer-suggestion"><div class="offer-company"><span>${esc(offer.company)}</span><a href="${esc(offer.url)}" target="_blank" rel="noopener noreferrer" aria-label="View listing ${esc(offer.company)}">↗</a></div><h3>${esc(offer.role)}</h3><p class="offer-conditions">${esc(location)}<span aria-hidden="true"> · </span>${esc(salary)}</p>${offer.description?`<p class="offer-excerpt">${esc(offer.description)}</p>`:''}<ul class="match-reasons">${offer.reasons.map(reason=>`<li>${esc(reason)}</li>`).join('')}</ul><details class="offer-checks"><summary>${esc(t("app.before_you_apply"))}</summary><ul>${offer.checks.map(check=>`<li>${esc(check)}</li>`).join('')}</ul></details><div class="offer-choices"><button class="primary" data-interest="accept" data-id="${esc(offer.id)}">${esc(t("app.prepare_application"))} <span aria-hidden="true">→</span></button><button class="quiet" data-interest="later" data-id="${esc(offer.id)}">${esc(t("workspace.save"))}</button><button class="quiet" data-interest="reject" data-id="${esc(offer.id)}">${esc(t("app.dismiss"))}</button><label class="rejection-reason"><span class="sr-only">${esc(t("workspace.reason_for_dismissing"))}</span><select data-reason="${esc(offer.id)}" aria-label="Dismissal reason for ${esc(offer.company)}"><option value="">${esc(t("workspace.reason_optional"))}</option><option value="role">${esc(t("workspace.role"))}</option><option value="location">${esc(t("app.location"))}</option><option value="salary">${esc(t("app.salary"))}</option><option value="company">${esc(t("app.company"))}</option></select></label></div><p class="offer-source">${esc(t("workspace.source"))} <a href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(offer.source)}</a> · ${offer.published_at?"Published "+esc(date(offer.published_at)):t("workspace.publication_date_not_provided")}</p></article>`;
   }
+  function externalSourceMarkup(items) {
+    if (!items.length) return '';
+    return `<details class="external-sources"><summary>${esc(t('discovery.external'))}</summary><p>${esc(t('discovery.external_help'))}</p><ul>${items.map(source=>`<li><a href="${esc(source.url)}" target="_blank" rel="noopener noreferrer">${esc(t('discovery.search_on', {name:source.name}))}</a><p>${esc(source.conditions)}</p></li>`).join('')}</ul></details>`;
+  }
+  function renderSourceCatalog(data) {
+    el('source-catalog').innerHTML=data.catalog.map(source=>`<div class="source-choice"><div><h3>${esc(source.name)} · ${esc(t(source.mode==='import'?'discovery.import':'discovery.external_short'))}</h3><p>${esc(source.selected?t('discovery.selected'):t('discovery.not_selected'))} ${esc(source.reason)}</p><p>${esc(source.conditions)}</p>${source.mode==='external'?`<a href="${esc(source.url)}" target="_blank" rel="noopener noreferrer">${esc(t('discovery.search_on',{name:source.name}))}</a>`:''}</div><label class="stacked-label"><span>${esc(t('discovery.choice', {name:source.name}))}</span><select data-source-preference="${esc(source.id)}">${['auto','on','off'].map(value=>`<option value="${value}" ${source.preference===value?'selected':''}>${esc(t('discovery.'+value))}</option>`).join('')}</select></label></div>`).join('');
+  }
   function offers(data) {
+    if(data.external_sources) externalSources=data.external_sources;
     const items=data.offers||[];el('recommendation-count').textContent=items.length?String(items.length):'';
     el('recommendations-list').innerHTML=items.length?items.map(offerMarkup).join(''):`<div class="empty-state"><strong>${esc(t("workspace.no_new_matches_yet"))}</strong><p>${esc(t("workspace.try_different_preferences_or_check_again_later_your"))}</p></div>`;
+    el('recommendations-list').insertAdjacentHTML('beforeend', externalSourceMarkup(externalSources));
+    const report=data.search||data.last_search;
+    el('source-collection-note').textContent=[report?.truncated?.length?t('discovery.truncated',{names:report.truncated.join(', ')}):'',report?.limited_sources?.length?t('discovery.limited',{names:report.limited_sources.join(', ')}):''].filter(Boolean).join(' ');
     el('recommendation-note').textContent=data.feedback_count?`Based on ${data.feedback_count} choices you’ve made.`:t("workspace.choose_a_job_to_prepare_an_application");
   }
   async function loadOffers(){offers(await api('/api/recommendations'));}
@@ -248,7 +261,7 @@
   async function loadUsage(){try{const data=await api('/api/usage');el('daily-limit').value=data.limit;const tokens=data.runs.map(run=>run.usage?.totalTokens ?? run.usage?.totalTokenCount ?? (typeof run.usage?.input_tokens==='number'&&typeof run.usage?.output_tokens==='number'?run.usage.input_tokens+run.usage.output_tokens:null)).filter(value=>typeof value==='number');
       el('usage-detail').textContent=`${data.requests} requests today. ${tokens.length?tokens.reduce((sum,value)=>sum+value,0).toLocaleString('en')+t("workspace.tokens_reported_by_your_ai_service"):t("workspace.your_ai_service_hasn_t_reported_token_usage")} The daily limit resets at 00:00 UTC.`;}catch(error){message(error.message,true);}}
   async function loadSettings(){
-    try{const sources=await api('/api/sources');el('source-boards').value=sources.boards.join('\n');const state=await api('/api/providers');el('connected-provider-name').textContent=state.name||t("workspace.your_ai_service");el('connected-provider-detail').textContent=state.connected ? (state.email || (state.provider==='chatgpt'?t("workspace.chatgpt_connected"):t("workspace.api_key_stored_in_your_system_keychain"))) : t('ux.disconnected_detail'); updateConnection(state);await loadUsage();}catch(error){message(error.message,true);}
+    try{const sources=await api('/api/sources');el('source-boards').value=sources.boards.join('\n');renderSourceCatalog(sources);const state=await api('/api/providers');el('connected-provider-name').textContent=state.name||t("workspace.your_ai_service");el('connected-provider-detail').textContent=state.connected ? (state.email || (state.provider==='chatgpt'?t("workspace.chatgpt_connected"):t("workspace.api_key_stored_in_your_system_keychain"))) : t('ux.disconnected_detail'); updateConnection(state);await loadUsage();}catch(error){message(error.message,true);}
   }
   function updateProfileDisplay(){
     el('profile-name').textContent=profile.name||t("workspace.your_profile");el('profile-initial').textContent=(profile.name||'C').slice(0,1).toUpperCase();
@@ -288,6 +301,7 @@
     el('profile-previous').onclick=()=>profileStep(step-1);el('profile-cancel').onclick=()=>{window.profileDirty=false;fillProfile(profile);activate();};
     document.querySelectorAll('[data-screen]').forEach(button=>button.onclick=()=>go(button.dataset.screen));el('profile-open').onclick=editProfile;el('settings-profile').onclick=editProfile;
     el('provider-change').onclick=()=>showConnection(true);el('provider-disconnect').onclick=async()=>{try{await api('/api/providers/disconnect',{method:'POST',body:'{}'});bootstrap.connection={connected:false,name:t("workspace.ai_not_connected")};updateProfileDisplay();updateConnection(bootstrap.connection);await loadSettings();}catch(error){message(error.message,true);}};
+    el('save-source-preferences').onclick=async()=>{const button=el('save-source-preferences');button.disabled=true;try{const preferences=Object.fromEntries([...document.querySelectorAll('[data-source-preference]')].map(select=>[select.dataset.sourcePreference,select.value]));renderSourceCatalog(await api('/api/sources',{method:'PUT',body:JSON.stringify({preferences})}));await loadOffers();message(t('discovery.saved'));}catch(error){message(error.message,true);}finally{button.disabled=false;}};
     el('save-source-boards').onclick=async()=>{try{const boards=el('source-boards').value.split('\n').map(value=>value.trim()).filter(Boolean);await api('/api/sources',{method:'PUT',body:JSON.stringify({boards})});message(t("workspace.sources_saved_they_ll_be_included_in_your"));}catch(error){message(error.message,true);}};
     el('save-daily-limit').onclick=async()=>{try{await api('/api/usage',{method:'PUT',body:JSON.stringify({limit:Number(el('daily-limit').value)})});await loadUsage();message(t("workspace.daily_limit_saved"));}catch(error){message(error.message,true);}};
     el('chat-form').onsubmit=sendChat;['first-search','search-offers','refresh-offers'].forEach(id=>el(id).onclick=search);

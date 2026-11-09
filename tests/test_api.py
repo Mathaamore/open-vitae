@@ -143,4 +143,21 @@ class ApiTest(unittest.TestCase):
         self.assertEqual(response.status_code,200)
         self.assertEqual(response.json()['status'],'SUBMITTED')
 
+    def test_source_settings_are_local_partial_and_validate_before_saving(self):
+        headers={'X-Local-Token':module.TOKEN}
+        with patch.object(module.sources, 'json_request') as network:
+            response=self.client.get('/api/sources')
+            self.assertEqual(response.status_code,200)
+            self.assertEqual(response.json()['catalog_version'],1)
+            self.assertEqual(len(response.json()['catalog']),16)
+            value=self.client.put('/api/sources',json={'boards':['smartrecruiters:example'],'preferences':{'remotive':'off'}},headers=headers)
+            self.assertEqual(value.status_code,200,value.text)
+            self.client.put('/api/sources',json={'boards':['ashby:example']},headers=headers)
+            self.assertEqual(self.client.get('/api/sources').json()['preferences'],{'remotive':'off'})
+            bad=self.client.put('/api/sources',json={'boards':[],'preferences':{'remoteok':'invalid'}},headers=headers)
+            self.assertEqual(bad.status_code,409)
+            self.assertEqual(self.client.get('/api/sources').json()['boards'],['ashby:example'])
+            self.assertEqual(self.client.put('/api/sources',json={'preferences':{} }).status_code,403)
+            network.assert_not_called()
+
 if __name__=='__main__':unittest.main()

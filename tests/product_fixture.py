@@ -26,7 +26,7 @@ for identity,company,role in [('offer-one','Example Tools','Python Product Engin
 
 def refresh(workspace,query='',progress=None,cancelled=None):
     if progress:progress({'source':'Local QA fixture','completed':0,'total':1,'imported':0})
-    result={'imported':2,'errors':[],'cached':False,'time':0,'checked_at':now(),'sources':['Local QA fixture']}
+    result={'truncated':['Local QA fixture'],'imported':2,'errors':[],'cached':False,'time':0,'checked_at':now(),'sources':['Local QA fixture']}
     workspace.set_setting('last_discovery',result);return result
 sources.refresh=refresh
 packets.inspect_offer=lambda url:{'url':url,'inspected':True,'text':'Example builds production tools with a small product engineering team.', 'fields':[

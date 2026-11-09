@@ -43,7 +43,7 @@ Start with your experience. Save a role worth considering. Prepare something you
 
 | Feature | What you get |
 |---|---|
-| **Find your next role** | Explore public job feeds and employer boards, or add a link or description yourself. See the reasons for a match and what still needs checking. |
+| **Find your next role** | Explore public job feeds selected from your search preferences, follow employer boards, or add a link or description yourself. See the reasons for a match and what still needs checking. |
 | **Bring your own CV** | Reuse a one-page PDF as a layout template. Keep the original and generate separate versions for each application. |
 | **Prepare in the right language** | Keep explanations in the app language and CVs and answers in the employer’s form language. Override detection when needed. |
 | **Follow every application** | Record applications, replies, interviews, offers, rejections and withdrawals, with dated notes and history. |

@@ -382,15 +382,22 @@ async def save_onboarding(request: Request):
 
 @app.get('/api/sources')
 def source_boards():
-    return {'boards': workspace.setting('source_boards', [])}
+    return {'boards': workspace.setting('source_boards', []),
+            'catalog_version': sources.source_catalog.VERSION,
+            'catalog': sources.source_catalog.selection(workspace.profile() or {}, workspace.setting('source_preferences', {})),
+            'preferences': workspace.setting('source_preferences', {})}
 
 
 @app.put('/api/sources')
 async def save_source_boards(request: Request):
     data = await payload(request)
-    boards = sources.ats.boards(data.get('boards'))
+    if not isinstance(data, dict) or set(data) - {'boards', 'preferences'}:
+        raise ValueError('Check the source settings.')
+    boards = sources.ats.boards(data.get('boards', workspace.setting('source_boards', [])))
+    preferences = sources.source_catalog.preferences(data.get('preferences', workspace.setting('source_preferences', {})))
     workspace.set_setting('source_boards', boards)
-    return {'boards': boards}
+    workspace.set_setting('source_preferences', preferences)
+    return source_boards()
 
 
 @app.post('/api/profile/import')
@@ -407,7 +414,7 @@ async def import_profile(request: Request):
 
 @app.get('/api/recommendations')
 def recommendations():
-    return {'offers': sources.recommendations(workspace), 'last_search': workspace.setting('last_discovery'), 'feedback_count': len(workspace.feedback())}
+    return {'external_sources': [s for s in source_boards()['catalog'] if s['mode'] == 'external' and s['selected']], 'offers': sources.recommendations(workspace), 'last_search': workspace.setting('last_discovery'), 'feedback_count': len(workspace.feedback())}
 
 
 def refresh_discovery(query):

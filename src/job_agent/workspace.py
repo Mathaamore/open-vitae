@@ -74,6 +74,11 @@ class Workspace:
             result[key] = list(dict.fromkeys(item.strip() for item in items))
         if not result['roles']:
             raise ValueError(tr('workspace.add_at_least_one_role_or_field_you'))
+        from .source_catalog import ISO_COUNTRIES
+        search_countries = value.get('search_countries', (self.profile() or {}).get('search_countries', []))
+        if not isinstance(search_countries, list) or len(search_countries) > 10 or any(not isinstance(code, str) or code not in ISO_COUNTRIES for code in search_countries):
+            raise ValueError('Use up to ten two-letter country codes, such as FR, GB or US.')
+        result['search_countries'] = list(dict.fromkeys(search_countries))
         result['remote'] = value.get('remote', 'flexible')
         if result['remote'] not in {'remote', 'hybrid', 'office', 'flexible'}:
             raise ValueError(tr('workspace.choose_remote_hybrid_on_site_or_flexible'))
@@ -107,7 +112,7 @@ class Workspace:
             raise ValueError(tr('workspace.this_setup_step_could_not_be_saved_reload'))
         limits = {'name': 120, 'bio': 2000, 'strengths': 4000, 'achievements': 10000, 'expectations': 4000,
                   'email': 254, 'phone': 80, 'portfolio': 500, 'availability': 120, 'cv_text': 30000,
-                  'cv_template': 64, 'roles': 1000, 'locations': 1000, 'remote': 20, 'salary_min': 20, 'strict_constraints': 5}
+                  'search_countries': 100, 'cv_template': 64, 'roles': 1000, 'locations': 1000, 'remote': 20, 'salary_min': 20, 'strict_constraints': 5}
         fields = value['fields']
         if not isinstance(fields, dict) or set(fields) - limits.keys() or any(not isinstance(text, str) or len(text) > limits[key] for key, text in fields.items()):
             raise ValueError(tr('workspace.your_progress_could_not_be_saved_check_the'))

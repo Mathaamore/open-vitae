@@ -17,6 +17,8 @@ with tempfile.TemporaryDirectory() as tmp:
         with sync_playwright() as p:
             browser=p.chromium.launch(headless=True);page=browser.new_page(viewport={'width':1440,'height':1000});errors=[]
             page.on('pageerror',lambda error:errors.append(str(error)))
+            external_reads=[]
+            page.route('https://**/*',lambda route:(external_reads.append(route.request.url),route.abort()))
             page.goto(url)
             expect(page.locator('#connection-step')).to_be_visible()
             expect(page).to_have_title('Open Vitæ')
@@ -48,10 +50,15 @@ with tempfile.TemporaryDirectory() as tmp:
             expect(form.locator('[name="name"]')).to_have_value('Alex Example')
             assert len(form.locator('[name="cv_template"]').input_value())==64
             assert 'Built production APIs' in form.locator('[name="cv_text"]').input_value()
-            form.locator('[name="roles"]').fill('Python engineer, Product engineer');form.locator('[name="locations"]').fill('France');form.locator('[name="remote"]').select_option('remote');page.locator('#profile-next').click()
+            form.locator('[name="search_countries"]').fill('FR, GB');form.locator('[name="roles"]').fill('Python engineer, Product engineer');form.locator('[name="locations"]').fill('France');form.locator('[name="remote"]').select_option('remote');page.locator('#profile-next').click()
             form.locator('[name="strengths"]').fill('Python, APIs');form.locator('[name="achievements"]').fill('Built a production API with a team.');page.locator('#profile-save').click()
             expect(page.locator('#explore')).to_be_visible();page.locator('#first-search').click();expect(page.locator('.offer-suggestion')).to_have_count(2)
             expect(page.locator('#chat-log')).to_contain_text('jobs in your selection')
+            expect(page.locator('#source-collection-note')).to_contain_text('Collection reached its limit')
+            page.locator('.external-sources summary').click()
+            expect(page.locator('.external-sources a').first).to_be_visible()
+            assert not external_reads, 'External sources must not be requested before a link is opened'
+            page.locator('.external-sources summary').click()
             # Results scroll independently of the frame and the pinned message field.
             page.locator('#recommendations-list').evaluate("node=>{for(let i=0;i<20;i++){const copy=node.firstElementChild.cloneNode(true);copy.dataset.qaClone='true';node.append(copy)}}")
             for width,height in ((1440,900),(1280,720),(1024,768),(840,580),(375,812)):
@@ -134,7 +141,24 @@ with tempfile.TemporaryDirectory() as tmp:
             page.emulate_media(color_scheme='dark',reduced_motion='reduce')
             page.screenshot(path=str(out/'product-dashboard-dark.png'))
             page.locator('#assistant-open').click();expect(page.locator('#settings-screen')).to_be_visible()
-            page.locator('[data-settings-tab="sources"]').click();page.locator('#source-boards').fill('ashby:example');page.locator('#save-source-boards').click()
+            page.emulate_media(reduced_motion='reduce')
+            page.locator('[data-settings-tab="sources"]').click()
+            expect(page.locator('.source-choice')).to_have_count(16)
+            expect(page.locator('[data-source-preference="remotive"]')).to_have_value('auto')
+            page.locator('[data-source-preference="remotive"]').select_option('off')
+            page.locator('#save-source-preferences').click()
+            expect(page.locator('#message')).to_contain_text('Source choices saved')
+            expect(page.locator('[data-source-preference="remotive"]')).to_have_value('off')
+            page.locator('[data-source-preference="remoteok"]').focus()
+            page.keyboard.press('ArrowDown');page.keyboard.press('Tab')
+            assert page.evaluate('document.activeElement !== document.body')
+            page.screenshot(path=str(out/'product-sources.png'))
+            page.set_viewport_size({'width':375,'height':812})
+            assert page.evaluate('document.documentElement.scrollWidth<=innerWidth')
+            page.locator('[data-source-preference="remotive"]').scroll_into_view_if_needed()
+            page.screenshot(path=str(out/'product-sources-mobile.png'))
+            page.set_viewport_size({'width':1440,'height':1000})
+            page.locator('#source-boards').fill('smartrecruiters:example');page.locator('#save-source-boards').click()
             expect(page.locator('#message')).to_contain_text('Sources saved')
             page.locator('[data-screen="explore"]').click();page.set_viewport_size({'width':375,'height':812});assert page.evaluate('document.documentElement.scrollWidth<=innerWidth')
             page.screenshot(path=str(out/'product-search-mobile.png'))

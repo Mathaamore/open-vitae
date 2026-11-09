@@ -59,9 +59,9 @@ class ProductTest(unittest.TestCase):
             with self.assertRaises(ValueError):public_url('https://example.com')
     def test_source_failures_are_visible_and_expired_offers_stay_out(self):
         self.ws.save_profile(PROFILE)
-        with patch.object(sources,'json_request',side_effect=ValueError('Unavailable')):
+        with patch.object(sources,'json_request',side_effect=ValueError('Unavailable')), patch.object(sources,'request',side_effect=ValueError('Unavailable')):
             result=sources.refresh(self.ws)
-        self.assertEqual(len(result['errors']),3)
+        self.assertEqual(len(result['errors']),len(result['sources']))
         self.assertEqual(result['imported'],0)
         self.offer()
         with self.store.db() as db:

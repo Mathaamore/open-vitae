@@ -614,3 +614,18 @@ dialog::backdrop { background: #24282e80; }
 .tracking-form-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .tracking-updated { display: block; margin-top: 8px; color: var(--muted); font-size: 12px; line-height: 20px; }
 .timeline p { white-space: pre-wrap; }
+
+.source-settings { margin-bottom: 32px; }
+.source-settings > p { max-width: 65ch; margin: 8px 0 24px; line-height: 24px; }
+.source-choice { display: flex; flex-wrap: wrap; gap: 16px 24px; padding: 20px 0; border-top: 1px solid var(--line); }
+.source-choice > div { flex: 1 1 320px; min-width: 0; }
+.source-choice p { max-width: 65ch; font-size: 13px; line-height: 20px; margin: 4px 0; }
+.source-choice .stacked-label { flex: 0 1 220px; }
+.source-choice a { display: inline-block; padding: 8px 0; font-size: 13px; }
+.external-sources { padding: 16px 0; border-top: 1px solid var(--line); }
+.external-sources summary { cursor: pointer; padding: 8px 0; }
+.external-sources p { font-size: 12px; line-height: 20px; }
+.external-sources li { margin: 12px 0; }
+.external-sources a { display: inline-block; padding: 8px 0; }
+#source-collection-note:empty { display: none; }
+#source-collection-note { padding: 0 16px 8px; }
